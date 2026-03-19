@@ -76,7 +76,7 @@
             LblVolume = new Label();
             nudAGCDecayTime = new NumericUpDown();
             nudAGCAttackTime = new NumericUpDown();
-            nudAGCThreshold = new NumericUpDown();
+            nudAGCTargetLevelDb = new NumericUpDown();
             nudBw = new NumericUpDown();
             LblBW = new Label();
             rbFm = new RadioButton();
@@ -108,7 +108,7 @@
             ((System.ComponentModel.ISupportInitialize)nudVolume).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudAGCDecayTime).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudAGCAttackTime).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)nudAGCThreshold).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudAGCTargetLevelDb).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudBw).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudPhaseCoeff).BeginInit();
             ((System.ComponentModel.ISupportInitialize)nudGainRatio).BeginInit();
@@ -553,7 +553,7 @@
             groupBox2.Controls.Add(LblVolume);
             groupBox2.Controls.Add(nudAGCDecayTime);
             groupBox2.Controls.Add(nudAGCAttackTime);
-            groupBox2.Controls.Add(nudAGCThreshold);
+            groupBox2.Controls.Add(nudAGCTargetLevelDb);
             groupBox2.Controls.Add(nudBw);
             groupBox2.Controls.Add(LblBW);
             groupBox2.Controls.Add(rbFm);
@@ -586,7 +586,7 @@
             // 
             // nudVolume
             // 
-            nudVolume.Location = new Point(790, 46);
+            nudVolume.Location = new Point(832, 46);
             nudVolume.Name = "nudVolume";
             nudVolume.ReadOnly = true;
             nudVolume.Size = new Size(60, 23);
@@ -595,7 +595,7 @@
             // LblVolume
             // 
             LblVolume.AutoSize = true;
-            LblVolume.Location = new Point(739, 49);
+            LblVolume.Location = new Point(781, 49);
             LblVolume.Name = "LblVolume";
             LblVolume.Size = new Size(50, 15);
             LblVolume.TabIndex = 17;
@@ -617,13 +617,13 @@
             nudAGCAttackTime.Size = new Size(60, 23);
             nudAGCAttackTime.TabIndex = 15;
             // 
-            // nudAGCThreshold
+            // nudAGCTargetLevelDb
             // 
-            nudAGCThreshold.Location = new Point(541, 46);
-            nudAGCThreshold.Name = "nudAGCThreshold";
-            nudAGCThreshold.ReadOnly = true;
-            nudAGCThreshold.Size = new Size(60, 23);
-            nudAGCThreshold.TabIndex = 14;
+            nudAGCTargetLevelDb.Location = new Point(541, 46);
+            nudAGCTargetLevelDb.Name = "nudAGCTargetLevelDb";
+            nudAGCTargetLevelDb.ReadOnly = true;
+            nudAGCTargetLevelDb.Size = new Size(60, 23);
+            nudAGCTargetLevelDb.TabIndex = 14;
             // 
             // nudBw
             // 
@@ -823,7 +823,7 @@
             ((System.ComponentModel.ISupportInitialize)nudVolume).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudAGCDecayTime).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudAGCAttackTime).EndInit();
-            ((System.ComponentModel.ISupportInitialize)nudAGCThreshold).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudAGCTargetLevelDb).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudBw).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudPhaseCoeff).EndInit();
             ((System.ComponentModel.ISupportInitialize)nudGainRatio).EndInit();
@@ -879,7 +879,7 @@
         private Label LblVolume;
         private NumericUpDown nudAGCDecayTime;
         private NumericUpDown nudAGCAttackTime;
-        private NumericUpDown nudAGCThreshold;
+        private NumericUpDown nudAGCTargetLevelDb;
         private NumericUpDown nudBw;
         private Label LblBW;
         private RadioButton rbFm;

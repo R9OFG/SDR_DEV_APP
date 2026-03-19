@@ -3,7 +3,7 @@
  *  
  *  SDR_DEV_APP
  *  Version: 1.0 beta
- *  Modified: 07-02-2026
+ *  Modified: 19-03-2026
  *  
  *  Autor: R9OFG.RU https://r9ofg.ru/
  *  
@@ -12,7 +12,6 @@
 
 using NAudio.CoreAudioApi;
 using System.Buffers;
-using System.Diagnostics;
 using System.Reflection;
 
 [assembly: AssemblyCopyright("© R9OFG 2026")]
@@ -92,7 +91,7 @@ namespace SDR_DEV_APP
         private float phaseErrorDeg = 0.0f;
         #endregion        
 
-        #region Демодуляция
+        #region Демодуляция и АРУ
 
         // Тип демодуляции, перечисление в классе DSP
         private DemodulationType demodType = DemodulationType.USB;
@@ -109,16 +108,23 @@ namespace SDR_DEV_APP
         private const float DEFAULT_BW_FM = 12500.0f;
         // Поле для сохранения фазы между вызовами DSP.DemodulateSSB
         private double demodPhaseAccum = 0.0;
-        
-        // Уровень АРУ
-        private float agcGain = 1.0f;
-        // Целевой пиковый уровень АРУ
-        private float agcTargetLevel = 0.7f;
-        // Скорость уменьшения усиления при превышении целевого уровня (в миллисекундах)
-        private float agcAttackTimeMs = 1.0f;
-        // Скорость увеличения усиления при затухании сигнала (в миллисекундах)
-        private float agcDecayTimeMs = 500.0f;
-        // Уровень громкости в процентах
+
+        // AGC состояние
+        private float agcGainLinear = 1.0f;          // текущее усиление (линейное)
+        private float agcEnvLin = 0.0f;              // сглаженная огибающая (линейная)
+        private float agcAlphaAttack = 0.0f;         // коэффициент атаки
+        private float agcAlphaDecay = 0.0f;          // коэффициент спада
+        private float agcThreshLin = 0.0f;           // порог в линейной форме
+        private float agcMaxGainLin = 0.5f;          // макс. усиление (линейное)
+        private float agcMinGainLin = 0.0f;          // мин. усиление (линейное)
+        private int agcHangCounter = 0;              // счётчик hang time
+        private int agcHangTimeSamples = 0;          // hang time в сэмплах
+        private const float AGC_NOISE_GATE = 0.001f; // порог шума (~-60 dBFS)
+        // AGC настройки
+        private float agcAttackTimeMs = 10.0f;       // атака (мс)
+        private float agcDecayTimeMs = 500.0f;       // спад (мс)
+        private float agcTargetLevelDb = -12.0f;     // целевой уровень (dB)
+        // Громкость
         private float volumePercent = 10.0f;
         #endregion
 
@@ -246,7 +252,7 @@ namespace SDR_DEV_APP
             changedParams.DemodBandwidthHz = IniSettings.DemodBandwidthHz;
             // Аудиовывод
             changedParams.AGCEnabled = IniSettings.AGCEnabled;
-            changedParams.AGCThreshold = IniSettings.AGCThreshold;
+            changedParams.AGCTargetLevelDb = IniSettings.AGCTargetLevelDb;
             changedParams.AGCAttackTimeMs = IniSettings.AGCAttackTimeMs;
             changedParams.AGCDecayTimeMs = IniSettings.AGCDecayTimeMs;
             changedParams.VolumePercent = IniSettings.VolumePercent;
@@ -615,68 +621,101 @@ namespace SDR_DEV_APP
             // ============================================================
             #region Контролы АРУ и громкости аудио вывода
 
-            // Обработчик включения/выключения АРУ
+            // Вкл/выкл АРУ
             chkAGC.CheckedChanged += (s, e) =>
             {
-                nudAGCThreshold.Enabled = chkAGC.Checked;
+                nudAGCTargetLevelDb.Enabled = chkAGC.Checked;
                 nudAGCAttackTime.Enabled = chkAGC.Checked;
                 nudAGCDecayTime.Enabled = chkAGC.Checked;
+
                 changedParams.AGCEnabled = chkAGC.Checked;
             };
-            // Настройка нуда для Threshold
-            nudAGCThreshold.DecimalPlaces = 2;
-            nudAGCThreshold.Increment = 0.05m;
-            nudAGCThreshold.Minimum = 0.01m;
-            nudAGCThreshold.Maximum = 1.0m;
-            nudAGCThreshold.Value = 0.7m;
-            // Обработчик изменения значения нуда
-            nudAGCThreshold.ValueChanged += (s, e) => { agcTargetLevel = (float)nudAGCThreshold.Value; changedParams.AGCThreshold = agcTargetLevel; };
-            // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
-            nudAGCThreshold.DoubleClick += (s, e) => { if ((Control.ModifierKeys & Keys.Control) != 0) nudAGCThreshold.Value = 0.7m; };
 
-            // Настройка нуда для Attack Time
+            // Уровень сигнала, выше которого АРУ начинает уменьшать усиление
+            nudAGCTargetLevelDb.DecimalPlaces = 0;
+            nudAGCTargetLevelDb.Minimum = -50m;
+            nudAGCTargetLevelDb.Maximum = 0m;
+            nudAGCTargetLevelDb.Increment = 1m;
+            nudAGCTargetLevelDb.Value = -12m;
+
+            nudAGCTargetLevelDb.ValueChanged += (s, e) =>
+            {
+                agcTargetLevelDb = (float)nudAGCTargetLevelDb.Value;
+                RecalculateAgcCoefficients();
+                changedParams.AGCTargetLevelDb = agcTargetLevelDb;
+            };
+
+            nudAGCTargetLevelDb.DoubleClick += (s, e) =>
+            {
+                if ((Control.ModifierKeys & Keys.Control) != 0)
+                    nudAGCTargetLevelDb.Value = -12m;
+            };
+
+            // Время (или скорость), за которое АРУ реагирует на резкое увеличение уровня сигнала (быстрое уменьшение усиления)
             nudAGCAttackTime.DecimalPlaces = 1;
-            nudAGCAttackTime.Increment = 0.1m;
-            nudAGCAttackTime.Minimum = 0.1m;
-            nudAGCAttackTime.Maximum = 100.0m;
-            nudAGCAttackTime.Value = 1.0m;
-            // Обработчик изменения значения нуда
-            nudAGCAttackTime.ValueChanged += (s, e) => { agcAttackTimeMs = (float)nudAGCAttackTime.Value; changedParams.AGCAttackTimeMs = agcAttackTimeMs; };
-            // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
-            nudAGCAttackTime.DoubleClick += (s, e) => { if ((Control.ModifierKeys & Keys.Control) != 0) nudAGCAttackTime.Value = 1.0m; };
+            nudAGCAttackTime.Minimum = 5m;
+            nudAGCAttackTime.Maximum = 500m;
+            nudAGCAttackTime.Increment = 5m;
+            nudAGCAttackTime.Value = 10m;
 
-            // Настройка нуда для Decay Time
+            nudAGCAttackTime.ValueChanged += (s, e) =>
+            {
+                agcAttackTimeMs = (float)nudAGCAttackTime.Value;
+                RecalculateAgcCoefficients();
+                changedParams.AGCAttackTimeMs = agcAttackTimeMs;
+            };
+
+            nudAGCAttackTime.DoubleClick += (s, e) =>
+            {
+                if ((Control.ModifierKeys & Keys.Control) != 0) nudAGCAttackTime.Value = 10m;
+                RecalculateAgcCoefficients();
+            };
+
+            // Время (или скорость), за которое АРУ восстанавливает усиление после падения уровня сигнала (медленное увеличение усиления)
             nudAGCDecayTime.DecimalPlaces = 0;
-            nudAGCDecayTime.Increment = 10m;
-            nudAGCDecayTime.Minimum = 10m;
-            nudAGCDecayTime.Maximum = 5000m;
-            nudAGCDecayTime.Value = 500m;
-            // Обработчик изменения значения нуда
-            nudAGCDecayTime.ValueChanged += (s, e) => { agcDecayTimeMs = (float)nudAGCDecayTime.Value; changedParams.AGCDecayTimeMs = agcDecayTimeMs; };
-            // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
-            nudAGCDecayTime.DoubleClick += (s, e) => { if ((Control.ModifierKeys & Keys.Control) != 0) nudAGCDecayTime.Value = 500m; };
+            nudAGCDecayTime.Minimum = 5m;
+            nudAGCDecayTime.Maximum = 500m;
+            nudAGCDecayTime.Increment = 5m;
+            nudAGCDecayTime.Value = 10m;
 
-            // Настройка нуда для Volume
+            nudAGCDecayTime.ValueChanged += (s, e) =>
+            {
+                agcDecayTimeMs = (float)nudAGCDecayTime.Value;
+                RecalculateAgcCoefficients();
+                changedParams.AGCDecayTimeMs = agcDecayTimeMs;
+            };
+
+            nudAGCDecayTime.DoubleClick += (s, e) =>
+            {
+                if ((Control.ModifierKeys & Keys.Control) != 0) nudAGCDecayTime.Value = 500m;
+                RecalculateAgcCoefficients();
+
+            };
+
+            // Уровень громкости аудио на выходе
             nudVolume.DecimalPlaces = 0;
-            nudVolume.Increment = 5m;
             nudVolume.Minimum = 0m;
             nudVolume.Maximum = 100m;
+            nudVolume.Increment = 5m;
             nudVolume.Value = 10m;
-            // Обработчик изменения значения нуда
-            nudVolume.ValueChanged += (s, e) => { volumePercent = (float)nudVolume.Value; changedParams.VolumePercent = volumePercent; };
-            
-            // Всплывающие подсказки на нудах
-            toolTip.SetToolTip(nudAGCThreshold, "AGC Threshold");
+
+            nudVolume.ValueChanged += (s, e) =>
+            {
+                volumePercent = (float)nudVolume.Value;
+                changedParams.VolumePercent = volumePercent;
+            };
+
+            // Tooltips
+            toolTip.SetToolTip(nudAGCTargetLevelDb, "AGC Target Level (dB)");
             toolTip.SetToolTip(nudAGCAttackTime, "AGC Attack Time (ms)");
             toolTip.SetToolTip(nudAGCDecayTime, "AGC Decay Time (ms)");
             toolTip.SetToolTip(nudVolume, "Audio Output Volume (%)");
 
-            // Начальное состояние
+            // Состояние контролов по умолчанию
             chkAGC.Checked = false;
-            nudAGCThreshold.Enabled = false;
+            nudAGCTargetLevelDb.Enabled = false;
             nudAGCAttackTime.Enabled = false;
             nudAGCDecayTime.Enabled = false;
-            nudVolume.Enabled = false;
             #endregion
 
             // ============================================================
@@ -862,7 +901,7 @@ namespace SDR_DEV_APP
 
             // Аудиовывод
             chkAGC.Checked = changedParams.AGCEnabled;
-            nudAGCThreshold.Value = (decimal)changedParams.AGCThreshold;
+            nudAGCTargetLevelDb.Value = (decimal)changedParams.AGCTargetLevelDb;
             nudAGCAttackTime.Value = (decimal)changedParams.AGCAttackTimeMs;
             nudAGCDecayTime.Value = (decimal)changedParams.AGCDecayTimeMs;
             nudVolume.Value = (decimal)changedParams.VolumePercent;
@@ -958,7 +997,7 @@ namespace SDR_DEV_APP
             #endregion
             // =============================================
 
-            #region 4. Демодуляция AM/SSB, AGC и вывод звука
+            #region 4. Демодуляция, AGC и вывод звука
 
             // Демодуляция запускается если аудиовыход не заглушён
             if (audioOutput != null && audioOutput.IsRunning && !chkMuteAudioOut.Checked)
@@ -970,7 +1009,6 @@ namespace SDR_DEV_APP
 
                 try
                 {
-                    // tempDemod* полностью перезаписываются — обнуление не нужно
                     iSpan.CopyTo(tempDemodI);
                     qSpan.CopyTo(tempDemodQ);
 
@@ -1001,7 +1039,7 @@ namespace SDR_DEV_APP
                                 demodCenterFreqHz,
                                 demodBandwidthHz,
                                 demodType,
-                                audioBuffer.AsSpan(0, iSpan.Length), // ← безопасный спан
+                                audioBuffer.AsSpan(0, iSpan.Length), // безопасный спан
                                 ref demodPhaseAccum
                             );
                             break;
@@ -1019,7 +1057,7 @@ namespace SDR_DEV_APP
 
                     #region Применение AGC и уровня громкости
 
-                    // Безопасная проверка: используем только актуальную длину
+                    // Проверка наличия полезного сигнала в буфере (защита от обработки тишины)
                     bool hasAudio = false;
                     for (int i = 0; i < iSpan.Length; i++)
                     {
@@ -1032,72 +1070,93 @@ namespace SDR_DEV_APP
 
                     if (hasAudio)
                     {
-                        // 1. Применение AGC (только если чекбокс включён)
-                        if (chkAGC.Checked)
+                        // Коэффициент громкости вывода (из контрола)
+                        float volumeGain = volumePercent / 100.0f;
+
+                        // КРИТИЧЕСКИ ВАЖНО: Базовое усиление сигнала сразу после демодуляции.
+                        // Сигнал с детектора огибающей/демодулятора часто имеет очень малую амплитуду.
+                        // Без этого предварительного подъема уровня детектор огибающей АРУ не реагирует 
+                        // (сигнал остается ниже порога шума AGC_NOISE_GATE), и АРУ не работает.
+                        const float baseGain = 10.0f; // Подбирается
+
+                        // Локальные копии состояния АГУ для работы внутри цикла (оптимизация доступа к памяти)
+                        float gain = agcGainLinear;
+                        float envAvg = agcEnvLin;
+                        int hang = agcHangCounter;
+
+                        for (int i = 0; i < iSpan.Length; i++)
                         {
-                            float targetLevel = agcTargetLevel;
-                            float attackTimeMs = agcAttackTimeMs;
-                            float decayTimeMs = agcDecayTimeMs;
-                            float sampleRateAgc = (float)currentSampleRate;
+                            // 1. Предварительное усиление сырого сигнала после демодуляции
+                            float sample = audioBuffer[i] * baseGain;
 
-                            // Вычисляем пиковый уровень ТОЛЬКО в актуальной части буфера
-                            float currentPeak = 0.0f;
-                            for (int i = 0; i < iSpan.Length; i++)
+                            if (chkAGC.Checked)
                             {
-                                float absSample = Math.Abs(audioBuffer[i]);
-                                if (absSample > currentPeak) currentPeak = absSample;
-                            }
+                                // 2. Детектор огибающей: вычисляем мгновенную амплитуду (модуль)
+                                float env = MathF.Abs(sample);
 
-                            float deltaTime = iSpan.Length / sampleRateAgc;
-                            float alphaAttack = 1.0f - MathF.Exp(-deltaTime / (attackTimeMs / 1000.0f));
-                            float alphaDecay = 1.0f - MathF.Exp(-deltaTime / (decayTimeMs / 1000.0f));
+                                // 3. Сглаживание огибающей (IIR-фильтр первого порядка)
+                                // Используем разные константы затухания для атаки (быстро) и спада (медленно)
+                                if (env > envAvg) envAvg += agcAlphaAttack * (env - envAvg);
+                                else envAvg += agcAlphaDecay * (env - envAvg);
 
-                            float targetGain = 1.0f;
-                            if (currentPeak > 0.0f)
-                            {
-                                targetGain = targetLevel / currentPeak;
-                                targetGain = Math.Clamp(targetGain, 0.001f, 100.0f);
-                            }
+                                // 4. Noise Gate: предотвращаем уход огибающей в ноль и усиление шума тишины
+                                // Ограничиваем минимальное значение огибающей порогом шума (~-60 dBFS)
+                                if (envAvg < AGC_NOISE_GATE) envAvg = AGC_NOISE_GATE;
 
-                            if (targetGain < agcGain)
-                            {
-                                agcGain += alphaAttack * (targetGain - agcGain);
+                                // 5. Расчёт требуемого коэффициента усиления для достижения целевого уровня
+                                // Формула: Gain = Target / CurrentEnvelope
+                                float requiredGain = agcThreshLin / (envAvg + 1e-9f); // +epsilon для защиты от деления на 0
+
+                                // Ограничение рассчитанного усиления допустимыми пределами (Min/Max Gain)
+                                if (requiredGain > agcMaxGainLin) requiredGain = agcMaxGainLin;
+                                if (requiredGain < agcMinGainLin) requiredGain = agcMinGainLin;
+
+                                // 6. Логика Hang Time (время удержания)
+                                // Если сигнал значительно выше порога, сбрасываем таймер удержания
+                                if (envAvg > agcThreshLin * 1.5f)
+                                {
+                                    hang = agcHangTimeSamples;
+                                }
+                                else if (hang > 0)
+                                {
+                                    // Пока таймер тикает, запрещаем резкое увеличение усиления (защита от щелчков при паузах)
+                                    hang--;
+                                    if (requiredGain > gain) requiredGain = gain;
+                                }
+
+                                // 7. Плавное изменение текущего усиления к расчетному значению
+                                // Важно: для уменьшения усиления используем быструю атаку, для увеличения — медленный спад
+                                if (requiredGain < gain)
+                                    gain += agcAlphaAttack * (requiredGain - gain); // Быстрое уменьшение (attack)
+                                else
+                                    gain += agcAlphaDecay * (requiredGain - gain);  // Медленное восстановление (decay)
+
+                                // 8. Применение рассчитанного динамического усиления к сэмплу
+                                sample *= gain;
+
+                                // Первичное ограничение (клиппинг) после применения АРУ
+                                if (sample > 1.0f) sample = 1.0f;
+                                else if (sample < -1.0f) sample = -1.0f;
                             }
                             else
                             {
-                                agcGain += alphaDecay * (targetGain - agcGain);
+                                // При выключенном АРУ сбрасываем состояние, чтобы при следующем включении не было скачка
+                                gain = 1.0f;
+                                envAvg = 0.0f;
+                                hang = 0;
                             }
 
-                            // Применяем усиление ТОЛЬКО к актуальной части
-                            for (int i = 0; i < iSpan.Length; i++)
-                            {
-                                audioBuffer[i] *= agcGain;
-                            }
+                            // 9. Применение пользовательской громкости
+                            sample *= volumeGain;
+
+                            // Финальное жесткое ограничение перед записью в буфер (-1.0 ... 1.0)
+                            audioBuffer[i] = Math.Clamp(sample, -1.0f, 1.0f);
                         }
 
-                        // 2. Применение общей громкости
-
-                        // Защита от перегрузки ДО умножения на громкость
-                        for (int i = 0; i < audioBuffer.Length; i++)
-                        {
-                            audioBuffer[i] = Math.Clamp(audioBuffer[i], -3.0f, 3.0f); // tanh эффективен в этом диапазоне
-                        }
-
-                        float volumeGain = volumePercent / 100.0f;
-                        for (int i = 0; i < iSpan.Length; i++)
-                        {
-                            audioBuffer[i] *= volumeGain;
-                        }
-
-                        // Финальное мягкое ограничение (limiter) + жёсткая защита от клиппинга
-                        for (int i = 0; i < audioBuffer.Length; i++)
-                        {
-                            // 1. Мягкое ограничение через tanh (сохраняет форму сигнала)
-                            float limited = MathF.Tanh(audioBuffer[i]);
-
-                            // 2. ЖЁСТКАЯ защита от клиппинга (гарантирует [-1.0, +1.0])
-                            audioBuffer[i] = Math.Clamp(limited, -1.0f, 1.0f);
-                        }
+                        // Сохранение обновленного состояния АРУ в поля класса для обработки следующего буфера
+                        agcGainLinear = gain;
+                        agcEnvLin = envAvg;
+                        agcHangCounter = hang;
                     }
                     #endregion
 
@@ -1190,10 +1249,27 @@ namespace SDR_DEV_APP
             // =============================================
 
             #region 8. Сохраняем длину буфера для обновления статус-бара (без BeginInvoke!)
-            // ← ИСПРАВЛЕНО: убран опасный BeginInvoke из аудио-коллбэка
             lastBufferLength = iSamples.Length;
             #endregion
             // =============================================
+        }
+
+        // Пересчет коэффициентов АРУ
+        private void RecalculateAgcCoefficients()
+        {
+            float fs = (float)currentSampleRate;
+
+            // Alpha = 1 - exp(-1 / (tau * Fs)), tau = time_ms * 0.001
+            agcAlphaAttack = 1.0f - MathF.Exp(-1.0f / (agcAttackTimeMs * 0.001f * fs));
+            agcAlphaDecay = 1.0f - MathF.Exp(-1.0f / (agcDecayTimeMs * 0.001f * fs));
+
+            // Пороги и ограничения в линейной форме
+            agcThreshLin = MathF.Pow(10.0f, agcTargetLevelDb / 20.0f);
+            agcMaxGainLin = MathF.Pow(10.0f, 40.0f / 20.0f);   // +40 dB макс
+            agcMinGainLin = MathF.Pow(10.0f, -20.0f / 20.0f);  // -20 dB мин
+
+            // Hang time: 250 мс в сэмплах
+            agcHangTimeSamples = (int)(0.250f * fs);
         }
 
         // Сброс состояния обработки
@@ -1201,9 +1277,6 @@ namespace SDR_DEV_APP
         {
             // Сброс фазы демодулятора
             demodPhaseAccum = 0.0;
-
-            // Сброс AGC
-            agcGain = 1.0f;
 
             // Сброс индекса кольцевого буфера спектра
             iqBufferIndex = 0;
@@ -2090,6 +2163,9 @@ namespace SDR_DEV_APP
                 btnOpenWav.Enabled = false;
 
                 chkMuteAudioOut.Enabled = true;
+                nudAGCTargetLevelDb.Enabled = false;
+                nudAGCAttackTime.Enabled = false;
+                nudAGCDecayTime.Enabled = false;
 
                 // Очистка осциллографа и водопада
                 oscilloscopeView?.Clear();
@@ -2249,6 +2325,9 @@ namespace SDR_DEV_APP
                 progressBarWavPosition.Style = ProgressBarStyle.Continuous;
 
                 chkMuteAudioOut.Enabled = true;
+                nudAGCTargetLevelDb.Enabled = false;
+                nudAGCAttackTime.Enabled = false;
+                nudAGCDecayTime.Enabled = false;
 
                 groupBox1.Enabled = true;
                 groupBox2.Enabled = true;
@@ -2571,11 +2650,19 @@ namespace SDR_DEV_APP
                 audioOutput = null;
 
                 chkAGC.Enabled = false;
+
+                nudAGCTargetLevelDb.Enabled = false;
+                nudAGCAttackTime.Enabled = false;
+                nudAGCDecayTime.Enabled = false;
                 nudVolume.Enabled = false;
             }
             else
             {
-                if (currentSource != null && currentSource.IsRunning) StartAudioOutput();
+                if (currentSource != null && currentSource.IsRunning) StartAudioOutput();      
+                
+                nudAGCTargetLevelDb.Enabled = chkAGC.Checked;
+                nudAGCAttackTime.Enabled = chkAGC.Checked;
+                nudAGCDecayTime.Enabled = chkAGC.Checked;
             }
         }
 
@@ -2700,23 +2787,20 @@ namespace SDR_DEV_APP
             spectrumTimer?.Stop();
             spectrumTimer?.Dispose();
 
-            // Запоминаем сохраняемые значения контролов
-            if (cbInputAudioDeviceList.SelectedItem is string deviceName)
+            // Запоминаем выбранные устройства
+            if (cbInputAudioDeviceList.SelectedItem is string deviceName &&
+                !string.IsNullOrEmpty(deviceName) && deviceName != NO_DEVICES_TEXT)
             {
-                if (!string.IsNullOrEmpty(deviceName) && deviceName != NO_DEVICES_TEXT)
-                {
-                    IniSettings.SelectedAudioDevice = deviceName;
-                }
+                IniSettings.SelectedAudioDevice = deviceName;
             }
 
-            if (cbOutputAudioDeviceList.SelectedItem is string renderDeviceName)
+            if (cbOutputAudioDeviceList.SelectedItem is string renderDeviceName &&
+                !string.IsNullOrEmpty(renderDeviceName) && renderDeviceName != NO_DEVICES_TEXT)
             {
-                if (!string.IsNullOrEmpty(renderDeviceName) && renderDeviceName != NO_DEVICES_TEXT)
-                {
-                    IniSettings.SelectedAudioRenderDevice = renderDeviceName;
-                }
+                IniSettings.SelectedAudioRenderDevice = renderDeviceName;
             }
 
+            // Запоминаем размеры и положение окна
             if (this.WindowState == FormWindowState.Normal)
             {
                 IniSettings.WindowLeft = this.Left;
@@ -2731,44 +2815,51 @@ namespace SDR_DEV_APP
                 IniSettings.WindowWidth = this.RestoreBounds.Width;
                 IniSettings.WindowHeight = this.RestoreBounds.Height;
             }
-
             IniSettings.WindowState = this.WindowState;
 
-            // Сохраняем текущие настройки в INI
-            // Водопад и спектры
+            // === Сохраняем все настройки из changedParams ===
+            // Спектр
             IniSettings.RefLevelDB = changedParams.RefLevelDB;
             IniSettings.DisplayRangeDB = changedParams.DisplayRangeDB;
             IniSettings.FftSize = changedParams.FftSize;
             IniSettings.FullSpectrumColor = changedParams.FullSpectrumColor;
             IniSettings.IChannelColor = changedParams.IChannelColor;
             IniSettings.QChannelColor = changedParams.QChannelColor;
+
+            // Водопад
             IniSettings.WaterfallColorRefDB = changedParams.WaterfallColorRefDB;
             IniSettings.WaterfallColorRangeDB = changedParams.WaterfallColorRangeDB;
             IniSettings.WaterfallScrollDown = changedParams.WaterfallScrollDown;
             IniSettings.SwapIQ = changedParams.SwapIQ;
+
             // Коррекции
             IniSettings.DcCorrectionEnabled = changedParams.DcCorrectionEnabled;
             IniSettings.GainBalanceEnabled = changedParams.GainBalanceEnabled;
             IniSettings.GainRatio = changedParams.GainRatio;
             IniSettings.PhaseCorrectionEnabled = changedParams.PhaseCorrectionEnabled;
             IniSettings.PhaseCoeff = changedParams.PhaseCoeff;
+
             // Фильтрация
             IniSettings.DigitalLpfEnabled = changedParams.DigitalLpfEnabled;
+
             // Демодуляция
             IniSettings.DemodType = changedParams.DemodType;
             IniSettings.DemodBandwidthHz = changedParams.DemodBandwidthHz;
-            // Аудиовывод
+
+            // Аудио
             IniSettings.AGCEnabled = changedParams.AGCEnabled;
-            IniSettings.AGCThreshold = changedParams.AGCThreshold;
+            IniSettings.AGCTargetLevelDb = changedParams.AGCTargetLevelDb; // 🔹 переименованное свойство
             IniSettings.AGCAttackTimeMs = changedParams.AGCAttackTimeMs;
             IniSettings.AGCDecayTimeMs = changedParams.AGCDecayTimeMs;
             IniSettings.VolumePercent = changedParams.VolumePercent;
+
+            // === Сохраняем INI файл ===
             IniSettings.Save();
         }
         #endregion
 
         #region Вспомогательные методы
-        
+
         // Форматирования частоты
         private static string FormatFrequency(float freqHz)
         {
