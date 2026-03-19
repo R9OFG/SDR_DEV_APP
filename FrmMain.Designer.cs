@@ -39,7 +39,7 @@
             rbTriggerQ = new RadioButton();
             rbTriggerI = new RadioButton();
             rbTriggerFree = new RadioButton();
-            label1 = new Label();
+            lblSeparatorOscill = new Label();
             trackBarTimeDiv = new TrackBar();
             lblTimePerDiv = new Label();
             chkAutoScale = new CheckBox();
@@ -150,7 +150,7 @@
             // 
             panelScopeControls.BackColor = SystemColors.Control;
             panelScopeControls.Controls.Add(groupTrigger);
-            panelScopeControls.Controls.Add(label1);
+            panelScopeControls.Controls.Add(lblSeparatorOscill);
             panelScopeControls.Controls.Add(trackBarTimeDiv);
             panelScopeControls.Controls.Add(lblTimePerDiv);
             panelScopeControls.Controls.Add(chkAutoScale);
@@ -226,13 +226,13 @@
             rbTriggerFree.Text = "None";
             rbTriggerFree.UseVisualStyleBackColor = true;
             // 
-            // label1
+            // lblSeparatorOscill
             // 
-            label1.BackColor = SystemColors.ActiveBorder;
-            label1.Location = new Point(136, 9);
-            label1.Name = "label1";
-            label1.Size = new Size(2, 262);
-            label1.TabIndex = 3;
+            lblSeparatorOscill.BackColor = SystemColors.ActiveBorder;
+            lblSeparatorOscill.Location = new Point(136, 9);
+            lblSeparatorOscill.Name = "lblSeparatorOscill";
+            lblSeparatorOscill.Size = new Size(2, 262);
+            lblSeparatorOscill.TabIndex = 3;
             // 
             // trackBarTimeDiv
             // 
@@ -842,7 +842,7 @@
         private CheckBox chkAutoScale;
         private TrackBar trackBarTimeDiv;
         private Label lblTimePerDiv;
-        private Label label1;
+        private Label lblSeparatorOscill;
         private GroupBox groupTrigger;
         private RadioButton rbTriggerQ;
         private RadioButton rbTriggerI;
