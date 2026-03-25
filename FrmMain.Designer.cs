@@ -45,6 +45,32 @@
             chkAutoScale = new CheckBox();
             lblSensitivity_V = new Label();
             trackBarSensitivity = new TrackBar();
+            tabPageCAT = new TabPage();
+            txtCATTerminalLog = new RichTextBox();
+            panelCATControls = new Panel();
+            chkCAT_SwapENC = new CheckBox();
+            chkCAT_Swap_IQ_Uac = new CheckBox();
+            LblCATPHCurrentNote = new Label();
+            nudCAT_PH_Corr_Current = new NumericUpDown();
+            LblCATAMPCurrentNote = new Label();
+            nudCAT_AMP_Corr_Current = new NumericUpDown();
+            LblCATSiDriverNote = new Label();
+            cmbCAT_SI_Driver_Value = new ComboBox();
+            LblCATXTallFreqNote = new Label();
+            LblCAT_Xtall_Freq = new Label();
+            LblCAT_Mode = new Label();
+            cmbCAT_Mode = new ComboBox();
+            chkCAT_AGC = new CheckBox();
+            chkCAT_PHASE_Corr = new CheckBox();
+            chkCAT_AMP_Corr = new CheckBox();
+            chkCAT_DC_Corr = new CheckBox();
+            chkCAT_TIM8_PWM = new CheckBox();
+            btnCAT_SendCommand = new Button();
+            tbCAT_Message = new TextBox();
+            LblCAT_Command = new Label();
+            LblCatComPort = new Label();
+            btnCatToggle = new Button();
+            cbCatComPorts = new ComboBox();
             LblInputAudioDevice = new Label();
             cbInputAudioDeviceList = new ComboBox();
             btnStartCapture = new Button();
@@ -70,6 +96,7 @@
             LblPlotTop = new Label();
             CbFftSize = new ComboBox();
             LblFftSize = new Label();
+            lblCAT_LO_Freq = new Label();
             groupBox2 = new GroupBox();
             chkAGC = new CheckBox();
             nudVolume = new NumericUpDown();
@@ -91,6 +118,7 @@
             chkGainBalance = new CheckBox();
             chkDcCorrection = new CheckBox();
             panelControls = new Panel();
+            LblCAT_LO_Freq_Label = new Label();
             chkLoopWavPlayback = new CheckBox();
             tabControl1.SuspendLayout();
             tabPageScope.SuspendLayout();
@@ -99,6 +127,10 @@
             ((System.ComponentModel.ISupportInitialize)nudTriggerLevel).BeginInit();
             ((System.ComponentModel.ISupportInitialize)trackBarTimeDiv).BeginInit();
             ((System.ComponentModel.ISupportInitialize)trackBarSensitivity).BeginInit();
+            tabPageCAT.SuspendLayout();
+            panelCATControls.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)nudCAT_PH_Corr_Current).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)nudCAT_AMP_Corr_Current).BeginInit();
             groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)NudWfColorRef).BeginInit();
             ((System.ComponentModel.ISupportInitialize)NudWfColorRange).BeginInit();
@@ -119,6 +151,7 @@
             // 
             tabControl1.Controls.Add(tabPageSpectrum);
             tabControl1.Controls.Add(tabPageScope);
+            tabControl1.Controls.Add(tabPageCAT);
             tabControl1.Location = new Point(0, 236);
             tabControl1.Name = "tabControl1";
             tabControl1.SelectedIndex = 0;
@@ -289,6 +322,269 @@
             trackBarSensitivity.TickFrequency = 10000;
             trackBarSensitivity.Value = 50;
             // 
+            // tabPageCAT
+            // 
+            tabPageCAT.Controls.Add(txtCATTerminalLog);
+            tabPageCAT.Controls.Add(panelCATControls);
+            tabPageCAT.Location = new Point(4, 24);
+            tabPageCAT.Name = "tabPageCAT";
+            tabPageCAT.Size = new Size(900, 422);
+            tabPageCAT.TabIndex = 2;
+            tabPageCAT.Text = "CAT SDR_DEV Board";
+            tabPageCAT.UseVisualStyleBackColor = true;
+            // 
+            // txtCATTerminalLog
+            // 
+            txtCATTerminalLog.Dock = DockStyle.Fill;
+            txtCATTerminalLog.Location = new Point(0, 0);
+            txtCATTerminalLog.Name = "txtCATTerminalLog";
+            txtCATTerminalLog.Size = new Size(900, 291);
+            txtCATTerminalLog.TabIndex = 14;
+            txtCATTerminalLog.Text = "";
+            // 
+            // panelCATControls
+            // 
+            panelCATControls.Controls.Add(chkCAT_SwapENC);
+            panelCATControls.Controls.Add(chkCAT_Swap_IQ_Uac);
+            panelCATControls.Controls.Add(LblCATPHCurrentNote);
+            panelCATControls.Controls.Add(nudCAT_PH_Corr_Current);
+            panelCATControls.Controls.Add(LblCATAMPCurrentNote);
+            panelCATControls.Controls.Add(nudCAT_AMP_Corr_Current);
+            panelCATControls.Controls.Add(LblCATSiDriverNote);
+            panelCATControls.Controls.Add(cmbCAT_SI_Driver_Value);
+            panelCATControls.Controls.Add(LblCATXTallFreqNote);
+            panelCATControls.Controls.Add(LblCAT_Xtall_Freq);
+            panelCATControls.Controls.Add(LblCAT_Mode);
+            panelCATControls.Controls.Add(cmbCAT_Mode);
+            panelCATControls.Controls.Add(chkCAT_AGC);
+            panelCATControls.Controls.Add(chkCAT_PHASE_Corr);
+            panelCATControls.Controls.Add(chkCAT_AMP_Corr);
+            panelCATControls.Controls.Add(chkCAT_DC_Corr);
+            panelCATControls.Controls.Add(chkCAT_TIM8_PWM);
+            panelCATControls.Controls.Add(btnCAT_SendCommand);
+            panelCATControls.Controls.Add(tbCAT_Message);
+            panelCATControls.Controls.Add(LblCAT_Command);
+            panelCATControls.Controls.Add(LblCatComPort);
+            panelCATControls.Controls.Add(btnCatToggle);
+            panelCATControls.Controls.Add(cbCatComPorts);
+            panelCATControls.Dock = DockStyle.Bottom;
+            panelCATControls.Location = new Point(0, 291);
+            panelCATControls.Name = "panelCATControls";
+            panelCATControls.Size = new Size(900, 131);
+            panelCATControls.TabIndex = 13;
+            // 
+            // chkCAT_SwapENC
+            // 
+            chkCAT_SwapENC.AutoSize = true;
+            chkCAT_SwapENC.Location = new Point(210, 50);
+            chkCAT_SwapENC.Name = "chkCAT_SwapENC";
+            chkCAT_SwapENC.Size = new Size(137, 19);
+            chkCAT_SwapENC.TabIndex = 8;
+            chkCAT_SwapENC.Text = "Swap Rotate Encoder";
+            chkCAT_SwapENC.UseVisualStyleBackColor = true;
+            // 
+            // chkCAT_Swap_IQ_Uac
+            // 
+            chkCAT_Swap_IQ_Uac.AutoSize = true;
+            chkCAT_Swap_IQ_Uac.Location = new Point(98, 50);
+            chkCAT_Swap_IQ_Uac.Name = "chkCAT_Swap_IQ_Uac";
+            chkCAT_Swap_IQ_Uac.Size = new Size(102, 19);
+            chkCAT_Swap_IQ_Uac.TabIndex = 7;
+            chkCAT_Swap_IQ_Uac.Text = "Swap IQ UAC1";
+            chkCAT_Swap_IQ_Uac.UseVisualStyleBackColor = true;
+            // 
+            // LblCATPHCurrentNote
+            // 
+            LblCATPHCurrentNote.AutoSize = true;
+            LblCATPHCurrentNote.Location = new Point(630, 88);
+            LblCATPHCurrentNote.Name = "LblCATPHCurrentNote";
+            LblCATPHCurrentNote.Size = new Size(95, 15);
+            LblCATPHCurrentNote.TabIndex = 21;
+            LblCATPHCurrentNote.Text = "Current PH Corr:";
+            // 
+            // nudCAT_PH_Corr_Current
+            // 
+            nudCAT_PH_Corr_Current.Location = new Point(731, 84);
+            nudCAT_PH_Corr_Current.Name = "nudCAT_PH_Corr_Current";
+            nudCAT_PH_Corr_Current.Size = new Size(60, 23);
+            nudCAT_PH_Corr_Current.TabIndex = 22;
+            // 
+            // LblCATAMPCurrentNote
+            // 
+            LblCATAMPCurrentNote.AutoSize = true;
+            LblCATAMPCurrentNote.Location = new Point(438, 88);
+            LblCATAMPCurrentNote.Name = "LblCATAMPCurrentNote";
+            LblCATAMPCurrentNote.Size = new Size(105, 15);
+            LblCATAMPCurrentNote.TabIndex = 19;
+            LblCATAMPCurrentNote.Text = "Current AMP Corr:";
+            // 
+            // nudCAT_AMP_Corr_Current
+            // 
+            nudCAT_AMP_Corr_Current.Location = new Point(548, 84);
+            nudCAT_AMP_Corr_Current.Name = "nudCAT_AMP_Corr_Current";
+            nudCAT_AMP_Corr_Current.Size = new Size(60, 23);
+            nudCAT_AMP_Corr_Current.TabIndex = 20;
+            // 
+            // LblCATSiDriverNote
+            // 
+            LblCATSiDriverNote.AutoSize = true;
+            LblCATSiDriverNote.Location = new Point(226, 88);
+            LblCATSiDriverNote.Name = "LblCATSiDriverNote";
+            LblCATSiDriverNote.Size = new Size(73, 15);
+            LblCATSiDriverNote.TabIndex = 17;
+            LblCATSiDriverNote.Text = "SI5351 Drive:";
+            // 
+            // cmbCAT_SI_Driver_Value
+            // 
+            cmbCAT_SI_Driver_Value.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbCAT_SI_Driver_Value.FormattingEnabled = true;
+            cmbCAT_SI_Driver_Value.Location = new Point(303, 84);
+            cmbCAT_SI_Driver_Value.Name = "cmbCAT_SI_Driver_Value";
+            cmbCAT_SI_Driver_Value.Size = new Size(121, 23);
+            cmbCAT_SI_Driver_Value.TabIndex = 18;
+            // 
+            // LblCATXTallFreqNote
+            // 
+            LblCATXTallFreqNote.AutoSize = true;
+            LblCATXTallFreqNote.Location = new Point(8, 87);
+            LblCATXTallFreqNote.Name = "LblCATXTallFreqNote";
+            LblCATXTallFreqNote.Size = new Size(60, 15);
+            LblCATXTallFreqNote.TabIndex = 15;
+            LblCATXTallFreqNote.Text = "XTall Freq:";
+            // 
+            // LblCAT_Xtall_Freq
+            // 
+            LblCAT_Xtall_Freq.AutoSize = true;
+            LblCAT_Xtall_Freq.BackColor = Color.Black;
+            LblCAT_Xtall_Freq.BorderStyle = BorderStyle.Fixed3D;
+            LblCAT_Xtall_Freq.Font = new Font("Consolas", 18F, FontStyle.Bold, GraphicsUnit.Point, 204);
+            LblCAT_Xtall_Freq.ForeColor = Color.Lime;
+            LblCAT_Xtall_Freq.Location = new Point(70, 80);
+            LblCAT_Xtall_Freq.Name = "LblCAT_Xtall_Freq";
+            LblCAT_Xtall_Freq.Size = new Size(144, 30);
+            LblCAT_Xtall_Freq.TabIndex = 16;
+            LblCAT_Xtall_Freq.Text = "25.000.000";
+            // 
+            // LblCAT_Mode
+            // 
+            LblCAT_Mode.AutoSize = true;
+            LblCAT_Mode.Location = new Point(722, 50);
+            LblCAT_Mode.Name = "LblCAT_Mode";
+            LblCAT_Mode.Size = new Size(41, 15);
+            LblCAT_Mode.TabIndex = 13;
+            LblCAT_Mode.Text = "Mode:";
+            // 
+            // cmbCAT_Mode
+            // 
+            cmbCAT_Mode.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbCAT_Mode.FormattingEnabled = true;
+            cmbCAT_Mode.Location = new Point(765, 46);
+            cmbCAT_Mode.Name = "cmbCAT_Mode";
+            cmbCAT_Mode.Size = new Size(121, 23);
+            cmbCAT_Mode.TabIndex = 14;
+            // 
+            // chkCAT_AGC
+            // 
+            chkCAT_AGC.AutoSize = true;
+            chkCAT_AGC.Location = new Point(670, 50);
+            chkCAT_AGC.Name = "chkCAT_AGC";
+            chkCAT_AGC.Size = new Size(50, 19);
+            chkCAT_AGC.TabIndex = 12;
+            chkCAT_AGC.Text = "AGC";
+            chkCAT_AGC.UseVisualStyleBackColor = true;
+            // 
+            // chkCAT_PHASE_Corr
+            // 
+            chkCAT_PHASE_Corr.AutoSize = true;
+            chkCAT_PHASE_Corr.Location = new Point(567, 50);
+            chkCAT_PHASE_Corr.Name = "chkCAT_PHASE_Corr";
+            chkCAT_PHASE_Corr.Size = new Size(101, 19);
+            chkCAT_PHASE_Corr.TabIndex = 11;
+            chkCAT_PHASE_Corr.Text = "PH Correction";
+            chkCAT_PHASE_Corr.UseVisualStyleBackColor = true;
+            // 
+            // chkCAT_AMP_Corr
+            // 
+            chkCAT_AMP_Corr.AutoSize = true;
+            chkCAT_AMP_Corr.Location = new Point(456, 50);
+            chkCAT_AMP_Corr.Name = "chkCAT_AMP_Corr";
+            chkCAT_AMP_Corr.Size = new Size(111, 19);
+            chkCAT_AMP_Corr.TabIndex = 10;
+            chkCAT_AMP_Corr.Text = "AMP Correction";
+            chkCAT_AMP_Corr.UseVisualStyleBackColor = true;
+            // 
+            // chkCAT_DC_Corr
+            // 
+            chkCAT_DC_Corr.AutoSize = true;
+            chkCAT_DC_Corr.Location = new Point(353, 50);
+            chkCAT_DC_Corr.Name = "chkCAT_DC_Corr";
+            chkCAT_DC_Corr.Size = new Size(101, 19);
+            chkCAT_DC_Corr.TabIndex = 9;
+            chkCAT_DC_Corr.Text = "DC Correction";
+            chkCAT_DC_Corr.UseVisualStyleBackColor = true;
+            // 
+            // chkCAT_TIM8_PWM
+            // 
+            chkCAT_TIM8_PWM.AutoSize = true;
+            chkCAT_TIM8_PWM.Location = new Point(9, 50);
+            chkCAT_TIM8_PWM.Name = "chkCAT_TIM8_PWM";
+            chkCAT_TIM8_PWM.Size = new Size(84, 19);
+            chkCAT_TIM8_PWM.TabIndex = 6;
+            chkCAT_TIM8_PWM.Text = "TIM8 PWM";
+            chkCAT_TIM8_PWM.UseVisualStyleBackColor = true;
+            // 
+            // btnCAT_SendCommand
+            // 
+            btnCAT_SendCommand.Location = new Point(774, 13);
+            btnCAT_SendCommand.Name = "btnCAT_SendCommand";
+            btnCAT_SendCommand.Size = new Size(112, 23);
+            btnCAT_SendCommand.TabIndex = 5;
+            btnCAT_SendCommand.Text = "Send Command";
+            btnCAT_SendCommand.UseVisualStyleBackColor = true;
+            // 
+            // tbCAT_Message
+            // 
+            tbCAT_Message.Location = new Point(397, 13);
+            tbCAT_Message.Name = "tbCAT_Message";
+            tbCAT_Message.Size = new Size(371, 23);
+            tbCAT_Message.TabIndex = 4;
+            // 
+            // LblCAT_Command
+            // 
+            LblCAT_Command.AutoSize = true;
+            LblCAT_Command.Location = new Point(330, 16);
+            LblCAT_Command.Name = "LblCAT_Command";
+            LblCAT_Command.Size = new Size(67, 15);
+            LblCAT_Command.TabIndex = 3;
+            LblCAT_Command.Text = "Command:";
+            // 
+            // LblCatComPort
+            // 
+            LblCatComPort.AutoSize = true;
+            LblCatComPort.Location = new Point(8, 17);
+            LblCatComPort.Name = "LblCatComPort";
+            LblCatComPort.Size = new Size(63, 15);
+            LblCatComPort.TabIndex = 0;
+            LblCatComPort.Text = "COM Port:";
+            // 
+            // btnCatToggle
+            // 
+            btnCatToggle.Location = new Point(204, 13);
+            btnCatToggle.Name = "btnCatToggle";
+            btnCatToggle.Size = new Size(112, 23);
+            btnCatToggle.TabIndex = 2;
+            btnCatToggle.Text = "Connect";
+            btnCatToggle.UseVisualStyleBackColor = true;
+            // 
+            // cbCatComPorts
+            // 
+            cbCatComPorts.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbCatComPorts.FormattingEnabled = true;
+            cbCatComPorts.Location = new Point(77, 13);
+            cbCatComPorts.Name = "cbCatComPorts";
+            cbCatComPorts.Size = new Size(121, 23);
+            cbCatComPorts.TabIndex = 1;
+            // 
             // LblInputAudioDevice
             // 
             LblInputAudioDevice.AutoSize = true;
@@ -431,7 +727,7 @@
             groupBox1.Size = new Size(903, 53);
             groupBox1.TabIndex = 14;
             groupBox1.TabStop = false;
-            groupBox1.Text = " FFT / WaterFall ";
+            groupBox1.Text = " FFT / WaterFall";
             // 
             // chkShowCursorInfo
             // 
@@ -545,6 +841,19 @@
             LblFftSize.Size = new Size(51, 15);
             LblFftSize.TabIndex = 0;
             LblFftSize.Text = "FFT Size:";
+            // 
+            // lblCAT_LO_Freq
+            // 
+            lblCAT_LO_Freq.AutoSize = true;
+            lblCAT_LO_Freq.BackColor = Color.Black;
+            lblCAT_LO_Freq.BorderStyle = BorderStyle.Fixed3D;
+            lblCAT_LO_Freq.Font = new Font("Consolas", 18F, FontStyle.Bold, GraphicsUnit.Point, 204);
+            lblCAT_LO_Freq.ForeColor = Color.Lime;
+            lblCAT_LO_Freq.Location = new Point(753, 62);
+            lblCAT_LO_Freq.Name = "lblCAT_LO_Freq";
+            lblCAT_LO_Freq.Size = new Size(144, 30);
+            lblCAT_LO_Freq.TabIndex = 15;
+            lblCAT_LO_Freq.Text = "14.100.000";
             // 
             // groupBox2
             // 
@@ -704,7 +1013,6 @@
             // 
             nudPhaseCoeff.Location = new Point(832, 18);
             nudPhaseCoeff.Name = "nudPhaseCoeff";
-            nudPhaseCoeff.ReadOnly = true;
             nudPhaseCoeff.Size = new Size(60, 23);
             nudPhaseCoeff.TabIndex = 5;
             // 
@@ -712,14 +1020,13 @@
             // 
             nudGainRatio.Location = new Point(541, 18);
             nudGainRatio.Name = "nudGainRatio";
-            nudGainRatio.ReadOnly = true;
             nudGainRatio.Size = new Size(60, 23);
             nudGainRatio.TabIndex = 3;
             // 
             // chkPhaseCorrection
             // 
             chkPhaseCorrection.AutoSize = true;
-            chkPhaseCorrection.Location = new Point(636, 22);
+            chkPhaseCorrection.Location = new Point(629, 22);
             chkPhaseCorrection.Name = "chkPhaseCorrection";
             chkPhaseCorrection.Size = new Size(173, 19);
             chkPhaseCorrection.TabIndex = 4;
@@ -758,6 +1065,8 @@
             // 
             // panelControls
             // 
+            panelControls.Controls.Add(LblCAT_LO_Freq_Label);
+            panelControls.Controls.Add(lblCAT_LO_Freq);
             panelControls.Controls.Add(chkLoopWavPlayback);
             panelControls.Controls.Add(groupBox2);
             panelControls.Controls.Add(groupBox1);
@@ -778,8 +1087,17 @@
             panelControls.Location = new Point(0, 0);
             panelControls.Margin = new Padding(3, 2, 3, 2);
             panelControls.Name = "panelControls";
-            panelControls.Size = new Size(909, 217);
+            panelControls.Size = new Size(911, 217);
             panelControls.TabIndex = 0;
+            // 
+            // LblCAT_LO_Freq_Label
+            // 
+            LblCAT_LO_Freq_Label.AutoSize = true;
+            LblCAT_LO_Freq_Label.Location = new Point(696, 69);
+            LblCAT_LO_Freq_Label.Name = "LblCAT_LO_Freq_Label";
+            LblCAT_LO_Freq_Label.Size = new Size(51, 15);
+            LblCAT_LO_Freq_Label.TabIndex = 14;
+            LblCAT_LO_Freq_Label.Text = "LO Freq:";
             // 
             // chkLoopWavPlayback
             // 
@@ -795,7 +1113,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(909, 726);
+            ClientSize = new Size(911, 726);
             Controls.Add(panelControls);
             Controls.Add(tabControl1);
             Icon = (Icon)resources.GetObject("$this.Icon");
@@ -812,6 +1130,11 @@
             ((System.ComponentModel.ISupportInitialize)nudTriggerLevel).EndInit();
             ((System.ComponentModel.ISupportInitialize)trackBarTimeDiv).EndInit();
             ((System.ComponentModel.ISupportInitialize)trackBarSensitivity).EndInit();
+            tabPageCAT.ResumeLayout(false);
+            panelCATControls.ResumeLayout(false);
+            panelCATControls.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)nudCAT_PH_Corr_Current).EndInit();
+            ((System.ComponentModel.ISupportInitialize)nudCAT_AMP_Corr_Current).EndInit();
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)NudWfColorRef).EndInit();
@@ -896,5 +1219,33 @@
         private Panel panelControls;
         private CheckBox chkAGC;
         private CheckBox chkLoopWavPlayback;
+        private TabPage tabPageCAT;
+        private Panel panelCATControls;
+        private CheckBox chkCAT_AGC;
+        private CheckBox chkCAT_PHASE_Corr;
+        private CheckBox chkCAT_AMP_Corr;
+        private CheckBox chkCAT_DC_Corr;
+        private CheckBox chkCAT_TIM8_PWM;
+        private Button btnCAT_SendCommand;
+        private TextBox tbCAT_Message;
+        private Label LblCAT_Command;
+        private Label LblCatComPort;
+        private Button btnCatToggle;
+        private ComboBox cbCatComPorts;
+        private RichTextBox txtCATTerminalLog;
+        private Label LblCAT_Mode;
+        private ComboBox cmbCAT_Mode;
+        private Label lblCAT_LO_Freq;
+        private Label LblCAT_LO_Freq_Label;
+        private Label LblCATXTallFreqNote;
+        private Label LblCAT_Xtall_Freq;
+        private Label LblCATSiDriverNote;
+        private ComboBox cmbCAT_SI_Driver_Value;
+        private NumericUpDown nudCAT_AMP_Corr_Current;
+        private Label LblCATAMPCurrentNote;
+        private Label LblCATPHCurrentNote;
+        private NumericUpDown nudCAT_PH_Corr_Current;
+        private CheckBox chkCAT_SwapENC;
+        private CheckBox chkCAT_Swap_IQ_Uac;
     }
 }

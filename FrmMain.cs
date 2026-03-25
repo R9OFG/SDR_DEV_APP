@@ -3,7 +3,7 @@
  *  
  *  SDR_DEV_APP
  *  Version: 1.0 beta
- *  Modified: 19-03-2026
+ *  Modified: 25-03-2026
  *  
  *  Autor: R9OFG.RU https://r9ofg.ru/
  *  
@@ -12,6 +12,7 @@
 
 using NAudio.CoreAudioApi;
 using System.Buffers;
+using System.IO.Ports;
 using System.Reflection;
 
 [assembly: AssemblyCopyright("© R9OFG 2026")]
@@ -178,7 +179,7 @@ namespace SDR_DEV_APP
         private RealIQSpectrumView? spectrumViewQ;
         #endregion
 
-        #region Окно осциллографа
+        #region Вкладка осциллографа
 
         // КЭШ состояния вкладки осциллографа
         private bool isScopeTabActive = false;
@@ -198,6 +199,26 @@ namespace SDR_DEV_APP
         // Целевая амплитуда для автоподстройки
         private const float TARGET_PEAK = 32768.0f;
         #endregion
+
+        #region CAT
+
+        // CAT модуль для связи с STM32
+        private CAT? catModule;
+        private bool suppressUiUpdate = false;
+        private string? statusContext = null;
+        // LO Frequency Control
+        private uint loFrequencyHz = 14100000;         // Текущая частота (по умолчанию 14.100.000)
+        private const uint LO_FREQ_MIN = 1000000;       // Мин. частота 1 МГц
+        private const uint LO_FREQ_MAX = 29999999;      // Макс. частота 29.999.999 МГц
+        // XTall Frequency Control
+        private uint xtallFrequencyHz = 25000000;      // Текущая частота (по умолчанию 25.000.000)
+        private const uint XTALL_FREQ_MIN = 1000000;   // Мин. частота 2 МГц
+        private const uint XTALL_FREQ_MAX = 29999999;   // Макс. частота 29.999.999 МГц
+        // настрйока лога терминала COM Порта
+        const int LOG_MAX_LINES = 200;                  // Макс. строк перед обрезкой
+        const int LOG_KEEP_LINES = 100;                 // Сколько строк оставлять после обрезки
+        #endregion
+
         #endregion
 
         #region Конструктор
@@ -484,7 +505,7 @@ namespace SDR_DEV_APP
             nudGainRatio.ValueChanged += (s, e) => { gainRatio = (float)nudGainRatio.Value; changedParams.GainRatio = gainRatio; };
             // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
             nudGainRatio.DoubleClick += (s, e) => { if ((Control.ModifierKeys & Keys.Control) != 0) nudGainRatio.Value = 1.0m; changedParams.GainRatio = gainRatio; };
-
+            
             // Фазовая коррекция
             chkPhaseCorrection.Text = "Corr I/Q Phase Balance: 0.0°";
             chkPhaseCorrection.ForeColor = System.Drawing.Color.Black;
@@ -497,8 +518,8 @@ namespace SDR_DEV_APP
                 changedParams.PhaseCorrectionEnabled = chkPhaseCorrection.Checked;
             };
             // Контрол коэффициента фазовой коррекции
-            nudPhaseCoeff.Minimum = -0.9m;
-            nudPhaseCoeff.Maximum = 0.9m;
+            nudPhaseCoeff.Minimum = -10m;
+            nudPhaseCoeff.Maximum = 10m;
             nudPhaseCoeff.Increment = 0.0001m;
             nudPhaseCoeff.Value = 0.0m;
             nudPhaseCoeff.DecimalPlaces = 4;
@@ -507,6 +528,32 @@ namespace SDR_DEV_APP
             nudPhaseCoeff.ValueChanged += (s, e) => { phaseCoeff = (float)nudPhaseCoeff.Value; changedParams.PhaseCoeff = phaseCoeff; };
             // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
             nudPhaseCoeff.DoubleClick += (s, e) => { if ((Control.ModifierKeys & Keys.Control) != 0) nudPhaseCoeff.Value = 0.0m; changedParams.PhaseCoeff = phaseCoeff; };
+            // Обработчик колёсика мыши для фазы (шаг 0.01)
+            nudPhaseCoeff.MouseWheel += (s, e) =>
+            {
+                if (nudCAT_PH_Corr_Current == null) return;
+
+                // Определяем направление
+                int delta = Math.Sign(e.Delta); // +1 вверх, -1 вниз
+
+                // Шаг для колёсика
+                decimal step = 0.01m;
+
+                // Рассчитываем новое значение
+                decimal newValue = nudPhaseCoeff.Value + delta * step;
+
+                // Ограничиваем диапазоном
+                newValue = Math.Max(nudPhaseCoeff.Minimum, Math.Min(nudPhaseCoeff.Maximum, newValue));
+
+                // Применяем
+                nudPhaseCoeff.Value = newValue;
+
+                // Подавляем стандартную прокрутку, чтобы не дёргалось
+                if (e is HandledMouseEventArgs mouseArgs)
+                {
+                    mouseArgs.Handled = true;
+                }
+            };
             #endregion
 
             // ============================================================
@@ -910,6 +957,9 @@ namespace SDR_DEV_APP
             // Обработчик изменения размеров основного окна приложения
             Resize += (s, e) => LayoutTabControl();
             LayoutTabControl();
+
+            // Инициализация вкладки CAT
+            SetupCatTab();
         }
         #endregion
 
@@ -1596,6 +1646,18 @@ namespace SDR_DEV_APP
                     Math.Max(0, this.ClientSize.Height - controlsHeight - statusBarHeight)
                 );
             }
+
+            // === Позиционирование меток частоты LO ===
+            if (lblCAT_LO_Freq != null)
+            {
+                // lblCAT_LO_Freq: 10px от правого края формы, ширина 144
+                lblCAT_LO_Freq.Location = new Point( this.ClientSize.Width - 144 - 10, lblCAT_LO_Freq.Location.Y );
+            }
+
+            if (LblCAT_LO_Freq_Label != null && lblCAT_LO_Freq != null)
+            {
+                LblCAT_LO_Freq_Label.Location = new Point( lblCAT_LO_Freq.Location.X - 57, LblCAT_LO_Freq_Label.Location.Y );
+            }
         }
 
         // Таймер анализа и отрисовки графиков
@@ -2009,8 +2071,1083 @@ namespace SDR_DEV_APP
         }
         #endregion
 
+        #region Вкладка CAT
+
+        // Настройка вкладки
+        private void SetupCatTab()
+        {
+            catModule = new CAT();
+
+            // Настройка RichTextBox лога (цвета, шрифт, контекстное меню)
+            if (txtCATTerminalLog is RichTextBox rtb)
+            {
+                rtb.BackColor = System.Drawing.Color.Black;
+                rtb.ForeColor = System.Drawing.Color.Lime;
+                rtb.ReadOnly = true;
+                rtb.Font = new Font("Consolas", 9);
+                rtb.DetectUrls = false;
+                rtb.Multiline = true;
+                rtb.ScrollBars = (RichTextBoxScrollBars)ScrollBars.Both;
+
+                #region Контекстное меню для лога терминала
+
+                var ctxMenu = new ContextMenuStrip();
+
+                // Сначала создаём оба пункта
+                var clearItem = new ToolStripMenuItem("Clear All");
+                var copyItem = new ToolStripMenuItem("Copy");
+
+                // Настраиваем событие Opening (теперь оба пункта уже существуют)
+                ctxMenu.Opening += (s, e) =>
+                {
+                    clearItem.Enabled = !string.IsNullOrEmpty(rtb.Text);
+                    copyItem.Enabled = rtb.SelectionLength > 0;
+                };
+
+                // Подписываем обработчики кликов
+                clearItem.Click += (s, e) => rtb.Clear();
+
+                copyItem.ShortcutKeys = Keys.Control | Keys.C;
+                copyItem.Click += (s, e) =>
+                {
+                    if (!string.IsNullOrEmpty(rtb.SelectedText))
+                    {
+                        Clipboard.SetText(rtb.SelectedText);
+                    }
+                };
+
+                // Обновляем состояние Copy при изменении выделения
+                rtb.SelectionChanged += (s, e) => copyItem.Enabled = rtb.SelectionLength > 0;
+
+                // Добавляем пункты в меню
+                ctxMenu.Items.Add(clearItem);
+                ctxMenu.Items.Add(new ToolStripSeparator());
+                ctxMenu.Items.Add(copyItem);
+
+                rtb.ContextMenuStrip = ctxMenu;
+
+                // Выделение слова по клику в логе
+                rtb.MouseClick += (s, e) =>
+                {
+                    if (e.Button == MouseButtons.Left)
+                    {
+                        SelectWordAtCursor(rtb, e.Location);
+                    }
+                };
+
+                // Копирование выделенного при двойном клике в логе
+                rtb.MouseDoubleClick += (s, e) =>
+                {
+                    if (e.Button == MouseButtons.Left)
+                    {
+                        SelectWordAtCursor(rtb, e.Location);
+                        if (!string.IsNullOrEmpty(rtb.SelectedText))
+                        {
+                            Clipboard.SetText(rtb.SelectedText);
+                        }
+                    }
+                };
+                #endregion
+            }
+
+            // Подписка на события модуля CAT
+            catModule.ConnectionStateChanged += (isConn) =>
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (btnCatToggle != null)
+                    {
+                        btnCatToggle.Text = isConn ? "Disconnect" : "Connect";
+                    }
+                    cbCatComPorts.Enabled = !isConn;
+                    LblCAT_Command.Enabled = isConn;
+                    tbCAT_Message.Enabled = isConn;
+                    btnCAT_SendCommand.Enabled = isConn;
+                    chkCAT_TIM8_PWM.Enabled = isConn;
+                    chkCAT_DC_Corr.Enabled = isConn;
+                    chkCAT_AMP_Corr.Enabled = isConn;
+                    chkCAT_PHASE_Corr.Enabled = isConn;
+                    chkCAT_AGC.Enabled = isConn;
+                    LblCAT_Mode.Enabled = isConn;
+                    cmbCAT_Mode.Enabled = isConn;
+                    chkCAT_Swap_IQ_Uac.Enabled = isConn;
+                    chkCAT_SwapENC.Enabled = isConn;
+                    lblCAT_LO_Freq.Enabled = isConn;
+                    LblCATXTallFreqNote.Enabled = isConn;
+                    LblCAT_Xtall_Freq.Enabled = isConn;
+                    LblCATSiDriverNote.Enabled = isConn;
+                    cmbCAT_SI_Driver_Value.Enabled = isConn;
+                    LblCATAMPCurrentNote.Enabled = isConn;
+                    nudCAT_AMP_Corr_Current.Enabled = isConn;
+                    LblCATPHCurrentNote.Enabled = isConn;
+                    nudCAT_PH_Corr_Current.Enabled = isConn;
+                    LogCatMessage(isConn ? "[CAT] Connected" : "[CAT] Disconnected");
+                }));
+            };
+
+            // Подписка на обработку событий от STM32
+            catModule.MessageReceived += (msg) =>
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    LogCatMessage(msg);
+                    ParseCatStatus(msg);
+                }));
+            };
+
+            // Подписка на события контролов CAT
+            cbCatComPorts.DropDown += (s, e) => RefreshComPorts();
+            btnCatToggle.Click += BtnCatToggle_Click;
+            tbCAT_Message!.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    SendCatCommandFromInput();
+                    e.SuppressKeyPress = true; // Убираем системный "бяп" и перенос строки
+                }
+            };
+            btnCAT_SendCommand.Click += BtnCAT_SendCommand_Click;
+
+            // Обработчик чекбокса TIM8 PWM
+            chkCAT_TIM8_PWM.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_TIM8_PWM.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] TIM8_PWM → {state}");
+                    catModule.CmdTim8Pwm(chkCAT_TIM8_PWM.Checked);
+                }
+            };
+
+            // Обработчик чекбокса DC Correction
+            chkCAT_DC_Corr.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_DC_Corr.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] DC_Corr → {state}");
+                    catModule.CmdDcCorrection(chkCAT_DC_Corr.Checked);
+                }
+            };
+
+            // Обработчик чекбокса AMP Correction
+            chkCAT_AMP_Corr.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_AMP_Corr.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] AMP_Corr → {state}");
+                    catModule.CmdAmpCorrection(chkCAT_AMP_Corr.Checked);
+                }
+            };
+
+            // Обработчик чекбокса PHASE Correction
+            chkCAT_PHASE_Corr.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_PHASE_Corr.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] PHASE_Corr → {state}");
+                    catModule.CmdPhaseCorrection(chkCAT_PHASE_Corr.Checked);
+                }
+            };
+
+            // Обработчик чекбокса AGC
+            chkCAT_AGC.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_AGC.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] AGC → {state}");
+                    catModule.CmdAgcOutput(chkCAT_AGC.Checked);
+                }
+            };
+
+            // Обработчик смены режима (USB/LSB/CW)
+            if (cmbCAT_Mode != null)
+            {
+                cmbCAT_Mode.SelectedIndexChanged += (s, e) =>
+                {
+                    if (suppressUiUpdate) return;
+                    if (catModule?.IsConnected == true && cmbCAT_Mode.SelectedItem is string mode)
+                    {
+                        LogCatMessage($"[CAT] Mode → {mode}");
+                        catModule.CmdModeSet(mode);
+                    }
+                };
+            }
+
+            // Обработчик чекбокса свопа IQ в UAC
+            chkCAT_Swap_IQ_Uac.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_Swap_IQ_Uac.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] Swap IQ UAC → {state}");
+                    catModule.CmdSwapIQUAC(chkCAT_Swap_IQ_Uac.Checked);
+                }
+            };
+
+            // Обработчик чекбокса свопа вращения энкодера
+            chkCAT_SwapENC.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_SwapENC.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] Swap Rotate Encoder → {state}");
+                    catModule.CmdSwapRotateENC(chkCAT_SwapENC.Checked);
+                }
+            };
+
+            // Обработчик выбора тока драйвера SI5351
+            if (cmbCAT_SI_Driver_Value != null)
+            {
+                cmbCAT_SI_Driver_Value.SelectedIndexChanged += (s, e) =>
+                {
+                    if (suppressUiUpdate) return;
+                    if (catModule?.IsConnected == true && cmbCAT_SI_Driver_Value.SelectedItem is string driverStr)
+                    {
+                        // Маппинг текста в значение для STM32
+                        uint driverValue = driverStr switch
+                        {
+                            "2mA" => 0x4C,
+                            "4mA" => 0x4D,
+                            "6mA" => 0x4E,
+                            "8mA" => 0x4F,
+                            _ => 0x4C // По умолчанию
+                        };
+
+                        LogCatMessage($"[CAT] SI Driver → {driverStr}");
+                        catModule.CmdSiDriverSet(driverValue);
+                    }
+                };
+            }
+
+            // Первичное заполнение списка COM портов
+            RefreshComPorts();
+
+            // Инициализация контрола моды
+            if (cmbCAT_Mode != null && cmbCAT_Mode.Items.Count == 0)
+            {
+                cmbCAT_Mode.Items.Clear();
+                cmbCAT_Mode.Items.Add("LSB");
+                cmbCAT_Mode.Items.Add("USB");
+                cmbCAT_Mode.Items.Add("CW");
+                cmbCAT_Mode.SelectedIndex = 0; // По умолчанию LSB
+            }
+
+            // Инициализация контрола тока драйвера SI5351
+            if (cmbCAT_SI_Driver_Value != null && cmbCAT_SI_Driver_Value.Items.Count == 0)
+            {
+                cmbCAT_SI_Driver_Value.Items.Clear();
+                cmbCAT_SI_Driver_Value.Items.Add("2mA");
+                cmbCAT_SI_Driver_Value.Items.Add("4mA");
+                cmbCAT_SI_Driver_Value.Items.Add("6mA");
+                cmbCAT_SI_Driver_Value.Items.Add("8mA");
+                cmbCAT_SI_Driver_Value.SelectedIndex = 3; // По умолчанию 8mA
+            }
+
+            // Инициализация нуда коэффициента амплитудной коррекеции текущего диапазона
+            if (nudCAT_AMP_Corr_Current != null)
+            {
+                nudCAT_AMP_Corr_Current.Minimum = 0.5m;
+                nudCAT_AMP_Corr_Current.Maximum = 1.5m;
+                nudCAT_AMP_Corr_Current.Increment = 0.001m;
+                nudCAT_AMP_Corr_Current.Value = 1.0m;
+                nudCAT_AMP_Corr_Current.DecimalPlaces = 3;
+            }
+            // Обработчик изменения значения коэффициента амплитудной коррекции текущего диапазона
+            nudCAT_AMP_Corr_Current!.ValueChanged += (s, e) =>
+            {
+                // Отправляем в устройство, если подключены и не подавлено обновление
+                if (!suppressUiUpdate && catModule?.IsConnected == true)
+                {
+                    float ratio = (float)nudCAT_AMP_Corr_Current.Value;
+                    LogCatMessage($"[CAT] AMP Ratio → {ratio:F3}");
+                    catModule.CmdAmpSet(ratio);
+                }
+            };
+            // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
+            nudCAT_AMP_Corr_Current.DoubleClick += (s, e) => {if ((Control.ModifierKeys & Keys.Control) != 0) nudCAT_AMP_Corr_Current.Value = 1.0m;};
+
+            // Инициализация нуда коэффициента фазовой коррекции текущего диапазона
+            if (nudCAT_PH_Corr_Current != null)
+            {
+                nudCAT_PH_Corr_Current.Minimum = -10.0m;
+                nudCAT_PH_Corr_Current.Maximum = 10.0m;
+                nudCAT_PH_Corr_Current.Increment = 0.0001m;
+                nudCAT_PH_Corr_Current.Value = 0.0m;
+                nudCAT_PH_Corr_Current.DecimalPlaces = 4;
+            }
+
+            // Обработчик изменения значения коэффициента фазовой коррекции
+            nudCAT_PH_Corr_Current!.ValueChanged += (s, e) =>
+            {
+                // Отправляем в устройство, если подключены и не подавлено обновление
+                if (!suppressUiUpdate && catModule?.IsConnected == true)
+                {
+                    float offset = (float)nudCAT_PH_Corr_Current.Value;
+                    LogCatMessage($"[CAT] PHASE Offset → {offset:F4}°");
+                    catModule.CmdPhaseSet(offset);
+                }
+            };
+
+            // Обработчик двойного клика для сброса к умолчанию (только с зажатым Ctrl)
+            nudCAT_PH_Corr_Current.DoubleClick += (s, e) =>
+            {
+                if ((Control.ModifierKeys & Keys.Control) != 0)
+                {
+                    nudCAT_PH_Corr_Current.Value = 0.0m;
+                }
+            };
+
+            // Обработчик колёсика мыши для фазы (шаг 0.01)
+            nudCAT_PH_Corr_Current.MouseWheel += (s, e) =>
+            {
+                if (nudCAT_PH_Corr_Current == null) return;
+
+                // Определяем направление
+                int delta = Math.Sign(e.Delta); // +1 вверх, -1 вниз
+
+                // Шаг для колёсика
+                decimal step = 0.01m;
+
+                // Рассчитываем новое значение
+                decimal newValue = nudCAT_PH_Corr_Current.Value + delta * step;
+
+                // Ограничиваем диапазоном
+                newValue = Math.Max(nudCAT_PH_Corr_Current.Minimum, Math.Min(nudCAT_PH_Corr_Current.Maximum, newValue));
+
+                // Применяем
+                nudCAT_PH_Corr_Current.Value = newValue;
+
+                // Подавляем стандартную прокрутку, чтобы не дёргалось
+                if (e is HandledMouseEventArgs mouseArgs)
+                {
+                    mouseArgs.Handled = true;
+                }
+            };
+
+            // Начальное состояние контролов
+            bool hasPorts = cbCatComPorts != null && cbCatComPorts.Items.Count > 0;
+            if (btnCatToggle != null)
+            {
+                btnCatToggle.Text = "Connect";
+                btnCatToggle.Enabled = hasPorts;
+            }
+            LblCAT_Command.Enabled = false;
+            tbCAT_Message.Enabled = false;
+            btnCAT_SendCommand!.Enabled = false;
+            chkCAT_TIM8_PWM.Enabled = false;
+            chkCAT_DC_Corr.Enabled = false;
+            chkCAT_AMP_Corr.Enabled = false;
+            chkCAT_PHASE_Corr.Enabled = false;
+            chkCAT_AGC.Enabled = false;
+            LblCAT_Mode.Enabled = false;
+            cmbCAT_Mode!.Enabled = false;
+            chkCAT_Swap_IQ_Uac.Enabled = false;
+            chkCAT_SwapENC.Enabled = false;
+            lblCAT_LO_Freq.Enabled = false;
+            LblCATXTallFreqNote.Enabled = false;
+            LblCAT_Xtall_Freq.Enabled = false;
+            LblCATSiDriverNote.Enabled = false;
+            cmbCAT_SI_Driver_Value!.Enabled = false;
+            LblCATAMPCurrentNote.Enabled = false;
+            nudCAT_AMP_Corr_Current!.Enabled = false;
+            LblCATPHCurrentNote.Enabled = false;
+            nudCAT_PH_Corr_Current!.Enabled = false;
+
+            // Настройка метки частоты LO
+            if (lblCAT_LO_Freq != null)
+            {
+                lblCAT_LO_Freq.AutoSize = false;
+                lblCAT_LO_Freq.Size = new Size(144, 30);
+                lblCAT_LO_Freq.Font = new Font("Consolas", 18, FontStyle.Bold);
+                lblCAT_LO_Freq.TextAlign = ContentAlignment.MiddleCenter;
+                lblCAT_LO_Freq.Cursor = Cursors.Hand;
+                lblCAT_LO_Freq.Text = FormatFrequencyCAT(loFrequencyHz);
+                // Обработчик прокрутки колеса мышки
+                lblCAT_LO_Freq.MouseWheel += LblLO_Freq_MouseWheel;
+            }
+
+            // Настройка метки частоты XTall
+            if (LblCAT_Xtall_Freq != null)
+            {
+                LblCAT_Xtall_Freq.AutoSize = false;
+                LblCAT_Xtall_Freq.Size = new Size(144, 30);
+                LblCAT_Xtall_Freq.Font = new Font("Consolas", 18, FontStyle.Bold);
+                LblCAT_Xtall_Freq.TextAlign = ContentAlignment.MiddleCenter;
+                LblCAT_Xtall_Freq.Cursor = Cursors.Hand;
+                LblCAT_Xtall_Freq.Text = FormatFrequencyCAT(xtallFrequencyHz);
+                // Обработчик прокрутки колеса мышки
+                LblCAT_Xtall_Freq.MouseWheel += LblXTall_Freq_MouseWheel;
+            }
+        }
+
+        // Обновление списка COM портов
+        private void RefreshComPorts()
+        {
+            if (cbCatComPorts == null) return;
+
+            var current = cbCatComPorts.SelectedItem?.ToString();
+            cbCatComPorts.Items.Clear();
+
+            foreach (var port in SerialPort.GetPortNames())
+                cbCatComPorts.Items.Add(port);
+
+            if (cbCatComPorts.Items.Count > 0)
+            {
+                if (!string.IsNullOrEmpty(current) && cbCatComPorts.Items.Contains(current))
+                    cbCatComPorts.SelectedItem = current;
+                else
+                    cbCatComPorts.SelectedIndex = 0;
+            }
+
+            if (btnCatToggle != null)
+            {
+                btnCatToggle.Enabled = cbCatComPorts.Items.Count > 0;
+            }
+        }
+
+        // Обработка кнопки подключения/отключения к COM порту
+        private void BtnCatToggle_Click(object? sender, EventArgs e)
+        {
+            if (cbCatComPorts?.SelectedItem is not string port)
+            {
+                LogCatMessage("[CAT Error] No COM port selected");
+                return;
+            }
+
+            if (!catModule!.IsConnected)
+            {
+                // Очистка лога терминала COM порта перед подключением
+                if (txtCATTerminalLog != null && !txtCATTerminalLog.IsDisposed)
+                {
+                    txtCATTerminalLog.Clear();
+                }
+
+                LogCatMessage($"[CAT] Connecting to {port}...");
+                Task.Run(() => catModule.Connect(port, 115200));
+            }
+            else
+            {
+                LogCatMessage("[CAT] Disconnecting...");
+                catModule.Disconnect();
+            }
+        }
+
+        // Отправка команды в COM порт
+        private void SendCatCommandFromInput()
+        {
+            if (!catModule!.IsConnected)
+            {
+                LogCatMessage("[CAT Error] Not connected");
+                return;
+            }
+
+            if (tbCAT_Message == null || string.IsNullOrWhiteSpace(tbCAT_Message.Text))
+            {
+                LogCatMessage("[CAT Error] Empty command");
+                return;
+            }
+
+            string cmd = tbCAT_Message.Text.Trim();
+
+            // Обновляем UI перед отправкой
+            UpdateControlsFromCommand(cmd);
+
+            LogCatMessage($"> {cmd}");
+            catModule.SendCommand(cmd);
+            tbCAT_Message.Clear();
+        }
+
+        // Обработчик кнопки отправки команды в COM порт
+        private void BtnCAT_SendCommand_Click(object? sender, EventArgs e)
+        {
+            SendCatCommandFromInput();
+        }
+
+        // Заполнение лога терминала COM порта
+        private void LogCatMessage(string msg)
+        {
+            if (txtCATTerminalLog is not RichTextBox rtb || rtb.IsDisposed) return;
+
+            if (rtb.Lines.Length > LOG_MAX_LINES)
+            {
+                var lines = rtb.Lines.Skip(rtb.Lines.Length - LOG_KEEP_LINES).ToArray();
+                rtb.Lines = lines;
+            }
+
+            rtb.AppendText($"{msg}{Environment.NewLine}");
+            rtb.ScrollToCaret();
+        }
+
+        // Парсинг ответов от STM32 и синхронизирует чекбоксы + частоту
+        private void ParseCatStatus(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return;
+
+            // === 1. Определение контекста по заголовкам (для многострочных ответов) ===
+            if (msg.Trim().Equals("TIM8 PWM:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "tim8_pwm";
+                return;
+            }
+            else if (msg.Trim().Equals("Swap IQ UAC:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "swap_iq_uac";
+                return;
+            }
+            else if (msg.Trim().Equals("Swap Rotate Encoder:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "swap_rt_enc";
+                return;
+            }
+            else if (msg.Contains("I/Q DC Correction:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "dc";
+                return;
+            }
+            else if (msg.Contains("I/Q Amplitude Correction:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "amp";
+                return;
+            }
+            else if (msg.Contains("I/Q Phase Correction:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "phase";
+                return;
+            }
+            else if (msg.Contains("AGC DAC Output:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "agc";
+                return;
+            }
+            else if (msg.Contains("Mode on active band:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "mode";
+                return;
+            }
+
+            // Обработка XTall Frequency (однострочный ответ)
+            if (msg.Contains("XTall Frequency:", StringComparison.OrdinalIgnoreCase) && msg.Contains("Hz"))
+            {
+                suppressUiUpdate = true;
+                try
+                {
+                    // Парсим: "XTall Frequency: 25000000 Hz"
+                    int colonIdx = msg.IndexOf(':');
+                    if (colonIdx >= 0)
+                    {
+                        string afterColon = msg[(colonIdx + 1)..].Trim();
+                        var parts = afterColon.Split([' '], StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length > 0 && uint.TryParse(parts[0], out uint freq))
+                        {
+                            if (freq >= XTALL_FREQ_MIN && freq <= XTALL_FREQ_MAX)
+                            {
+                                xtallFrequencyHz = freq;
+                                LblCAT_Xtall_Freq.Text = FormatFrequencyCAT(xtallFrequencyHz);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    suppressUiUpdate = false;
+                }
+                return; // Выходим, дальше не обрабатываем
+            }
+
+            // Обработка SI Driver Status (однострочный ответ)
+            // Формат: "si_driver_status: 2mA (0x4C)"
+            if (msg.StartsWith("si_driver_status:", StringComparison.OrdinalIgnoreCase))
+            {
+                suppressUiUpdate = true;
+                try
+                {
+                    // Парсим: "si_driver_status: 2mA (0x4C)"
+                    int colonIdx = msg.IndexOf(':');
+                    if (colonIdx >= 0)
+                    {
+                        string afterColon = msg[(colonIdx + 1)..].Trim();
+                        // Извлекаем часть до скобки: "2mA"
+                        int parenIdx = afterColon.IndexOf('(');
+                        string driverStr = parenIdx > 0
+                            ? afterColon[..parenIdx].Trim()
+                            : afterColon.Split(' ')[0];
+
+                        // Если такой элемент есть в ComboBox — выбираем его
+                        if (cmbCAT_SI_Driver_Value != null && cmbCAT_SI_Driver_Value.Items.Contains(driverStr))
+                        {
+                            cmbCAT_SI_Driver_Value.SelectedItem = driverStr;
+                        }
+                    }
+                }
+                finally
+                {
+                    suppressUiUpdate = false;
+                }
+                return; // Выходим, дальше не обрабатываем
+            }
+
+            // Обработка LO Frequency (однострочный ответ)
+            if (msg.Contains("LO Frequency:", StringComparison.OrdinalIgnoreCase) && msg.Contains("Hz"))
+            {
+                suppressUiUpdate = true;
+                try
+                {
+                    // Парсим: "LO Frequency: 14100000 Hz"
+                    int colonIdx = msg.IndexOf(':');
+                    if (colonIdx >= 0)
+                    {
+                        string afterColon = msg[(colonIdx + 1)..].Trim();
+                        var parts = afterColon.Split([' '], StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length > 0 && uint.TryParse(parts[0], out uint freq))
+                        {
+                            if (freq >= LO_FREQ_MIN && freq <= LO_FREQ_MAX)
+                            {
+                                loFrequencyHz = freq;
+                                lblCAT_LO_Freq.Text = FormatFrequencyCAT(loFrequencyHz);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    suppressUiUpdate = false;
+                }
+                return; // Выходим, дальше не обрабатываем
+            }
+
+            // === 2. Парсинг строки со статусом (если контекст известен) ===
+            if (!string.IsNullOrEmpty(statusContext) && msg.Contains("Status :"))
+            {
+                bool isOn = msg.Contains("ON", StringComparison.OrdinalIgnoreCase) &&
+                            !msg.Contains("OFF", StringComparison.OrdinalIgnoreCase);
+
+                suppressUiUpdate = true;
+                try
+                {
+                    switch (statusContext)
+                    {
+                        case "tim8_pwm":
+                            if (chkCAT_TIM8_PWM != null && chkCAT_TIM8_PWM.Checked != isOn)
+                                chkCAT_TIM8_PWM.Checked = isOn;
+                            statusContext = null; // Сброс сразу
+                            break;
+
+                        case "swap_iq_uac":
+                            if (chkCAT_Swap_IQ_Uac != null && chkCAT_Swap_IQ_Uac.Checked != isOn)
+                                chkCAT_Swap_IQ_Uac.Checked = isOn;
+                            statusContext = null; // Сброс сразу
+                            break;
+
+                        case "swap_rt_enc":
+                            if (chkCAT_SwapENC != null && chkCAT_SwapENC.Checked != isOn)
+                                chkCAT_SwapENC.Checked = isOn;
+                            statusContext = null; // Сброс сразу
+                            break;
+
+                        case "dc":
+                            if (chkCAT_DC_Corr != null && chkCAT_DC_Corr.Checked != isOn)
+                                chkCAT_DC_Corr.Checked = isOn;
+                            statusContext = null; // Сброс сразу
+                            break;
+
+                        case "amp":
+                            if (chkCAT_AMP_Corr != null && chkCAT_AMP_Corr.Checked != isOn)
+                                chkCAT_AMP_Corr.Checked = isOn;
+                            // НЕ сбрасываем statusContext — ждём строку с Ratio!
+                            break;
+
+                        case "phase":
+                            if (chkCAT_PHASE_Corr != null && chkCAT_PHASE_Corr.Checked != isOn)
+                                chkCAT_PHASE_Corr.Checked = isOn;
+                            // НЕ сбрасываем statusContext — ждём строку с Offset!
+                            break;
+
+                        case "agc":
+                            if (chkCAT_AGC != null && chkCAT_AGC.Checked != isOn)
+                                chkCAT_AGC.Checked = isOn;
+                            statusContext = null; // Сброс сразу
+                            break;
+
+                        case "mode":
+                            if (msg.Contains("LSB", StringComparison.OrdinalIgnoreCase))
+                                cmbCAT_Mode.SelectedItem = "LSB";
+                            else if (msg.Contains("USB", StringComparison.OrdinalIgnoreCase))
+                                cmbCAT_Mode.SelectedItem = "USB";
+                            else if (msg.Contains("CW", StringComparison.OrdinalIgnoreCase))
+                                cmbCAT_Mode.SelectedItem = "CW";
+                            statusContext = null; // Сброс сразу
+                            break;
+                    }
+                }
+                finally
+                {
+                    suppressUiUpdate = false;
+                    // statusContext = null;  ← УБРАНО отсюда! Теперь сброс внутри case
+                }
+            }
+            // === 3. Обработка дополнительных строк (Ratio / Offset) ===
+            // Этот блок выполняется ОТДЕЛЬНО, когда приходит вторая строка ответа
+            else if (!string.IsNullOrEmpty(statusContext))
+            {
+                suppressUiUpdate = true;
+                try
+                {
+                    switch (statusContext)
+                    {
+                        case "amp":
+                            // Парсинг коэффициента (строка "  Ratio  : 1.100 (Q/I)")
+                            if (msg.Contains("Ratio  :"))
+                            {
+                                int colonIdx = msg.IndexOf(':');
+                                if (colonIdx >= 0)
+                                {
+                                    string afterColon = msg[(colonIdx + 1)..].Trim();
+                                    // Извлекаем число до пробела или скобки: "1.100"
+                                    var parts = afterColon.Split([' ', '('], StringSplitOptions.RemoveEmptyEntries);
+                                    if (parts.Length > 0 && float.TryParse(parts[0],
+                                        System.Globalization.NumberStyles.Float,
+                                        System.Globalization.CultureInfo.InvariantCulture,
+                                        out float ratio))
+                                    {
+                                        // Обновляем NumericUpDown, если в диапазоне
+                                        if (ratio >= 0.5f && ratio <= 1.5f && nudCAT_AMP_Corr_Current != null)
+                                        {
+                                            nudCAT_AMP_Corr_Current.Value = (decimal)ratio;
+                                        }
+                                    }
+                                }
+                                statusContext = null; // Сброс после обработки Ratio
+                            }
+                            break;
+
+                        case "phase":
+                            // Парсинг угла (строка "  Offset : 2.5000 deg")
+                            if (msg.Contains("Offset :"))
+                            {
+                                int colonIdx = msg.IndexOf(':');
+                                if (colonIdx >= 0)
+                                {
+                                    string afterColon = msg[(colonIdx + 1)..].Trim();
+                                    var parts = afterColon.Split([' ', '('], StringSplitOptions.RemoveEmptyEntries);
+                                    if (parts.Length > 0 && float.TryParse(parts[0],
+                                        System.Globalization.NumberStyles.Float,
+                                        System.Globalization.CultureInfo.InvariantCulture,
+                                        out float offset))
+                                    {
+                                        // Обновляем NumericUpDown для фазы, если в диапазоне
+                                        if (offset >= -10.0f && offset <= 10.0f && nudCAT_PH_Corr_Current != null)
+                                        {
+                                            nudCAT_PH_Corr_Current.Value = (decimal)offset;
+                                        }
+                                    }
+                                }
+                                statusContext = null; // Сброс после обработки Offset
+                            }
+                            break;
+                    }
+                }
+                finally
+                {
+                    suppressUiUpdate = false;
+                }
+            }
+        }
+
+        // Форматирование строки частоты CAT
+        private static string FormatFrequencyCAT(uint hz)
+        {
+            uint mhz = hz / 1_000_000;           // 0...29
+            uint khz = (hz / 1_000) % 1_000;     // 000...999
+            uint hz_part = hz % 1_000;           // 000...999
+
+            // :00 — два знака с ведущим нулём, :000 — три знака
+            return $"{mhz:00}.{khz:000}.{hz_part:000}";
+        }
+
+        // Возвращает шаг изменения частоты по координате X курсора мышки
+        private static uint GetFreqStepByPosition(int x)
+        {
+            // Десятки МГц: 7-12
+            if (x >= 7 && x <= 12) return 10_000_000;
+
+            // Единицы МГц: 22-28
+            if (x >= 22 && x <= 28) return 1_000_000;
+
+            // Сотни кГц: 44-50
+            if (x >= 44 && x <= 50) return 100_000;
+
+            // Десятки кГц: 60-66
+            if (x >= 60 && x <= 66) return 10_000;
+
+            // Единицы кГц: 74-80
+            if (x >= 74 && x <= 80) return 1_000;
+
+            // Сотни Гц: 99-104
+            if (x >= 99 && x <= 104) return 100;
+
+            // Десятки Гц: 113-117
+            if (x >= 113 && x <= 117) return 10;
+
+            // Единицы Гц: 126-131
+            if (x >= 126 && x <= 131) return 1;
+
+            // Не над разрядом
+            return 0;
+        }
+
+        // Прокрутка колёсика над частотой LO — шаг зависит от активного разряда
+        private void LblLO_Freq_MouseWheel(object? sender, MouseEventArgs e)
+        {
+            if (catModule?.IsConnected != true) return;
+
+            // Определяем шаг по позиции X
+            uint step = GetFreqStepByPosition(e.X);
+            if (step == 0) return; // Курсор не над разрядом
+
+            // Направление прокрутки
+            int delta = Math.Sign(e.Delta); // +1 вверх, -1 вниз
+
+            // Рассчитываем новую частоту
+            long newFreq = (long)loFrequencyHz + delta * (long)step;
+
+            // Ограничиваем диапазон
+            newFreq = Math.Clamp(newFreq, LO_FREQ_MIN, LO_FREQ_MAX);
+
+            if ((uint)newFreq != loFrequencyHz)
+            {
+                loFrequencyHz = (uint)newFreq;
+                lblCAT_LO_Freq.Text = FormatFrequencyCAT(loFrequencyHz);
+
+                // Отправляем команду в порт
+                catModule.CmdLoFreqSet(loFrequencyHz);
+            }
+        }
+
+        // Прокрутка колёсика над частотой XTall — шаг зависит от активного разряда
+        private void LblXTall_Freq_MouseWheel(object? sender, MouseEventArgs e)
+        {
+            if (catModule?.IsConnected != true) return;
+
+            // Определяем шаг по позиции X
+            uint step = GetFreqStepByPosition(e.X);
+            if (step == 0) return; // Курсор не над разрядом
+
+            // Направление прокрутки
+            int delta = Math.Sign(e.Delta); // +1 вверх, -1 вниз
+
+            // Рассчитываем новую частоту
+            long newFreq = (long)xtallFrequencyHz + delta * (long)step;
+
+            // Ограничиваем диапазон
+            newFreq = Math.Clamp(newFreq, XTALL_FREQ_MIN, XTALL_FREQ_MAX);
+
+            if ((uint)newFreq != xtallFrequencyHz)
+            {
+                xtallFrequencyHz = (uint)newFreq;
+                LblCAT_Xtall_Freq.Text = FormatFrequencyCAT(xtallFrequencyHz);
+
+                // Отправляем команду в порт
+                catModule.CmdXtallFreqSet(xtallFrequencyHz);
+            }
+        }
+
+        // Выделение текста между разделителями под курсором в RichTextBox
+        private static void SelectWordAtCursor(RichTextBox rtb, Point mousePos)
+        {
+            if (string.IsNullOrEmpty(rtb.Text)) return;
+
+            // Получаем индекс символа под курсором
+            int charIndex = rtb.GetCharIndexFromPosition(mousePos);
+            if (charIndex < 0 || charIndex >= rtb.Text.Length) return;
+
+            string text = rtb.Text;
+            int start = charIndex;
+            int end = charIndex;
+
+            // Разделители: пробел, табуляция, новая строка, спецсимволы лога
+            char[] delimiters = [' ', '\t', '\r', '\n', '[', ']', '>', ':', '(', ')', '{', '}', '=', '/', '\\'];
+
+            // Ищем начало слова (движемся влево)
+            while (start > 0 && Array.IndexOf(delimiters, text[start - 1]) < 0)
+            {
+                start--;
+            }
+
+            // Ищем конец слова (движемся вправо)
+            while (end < text.Length && Array.IndexOf(delimiters, text[end]) < 0)
+            {
+                end++;
+            }
+
+            // Выделяем найденное слово
+            if (end > start)
+            {
+                rtb.Select(start, end - start);
+            }
+        }
+
+        // Обновление состояния контролов CAT на основе отправленной команды
+        private void UpdateControlsFromCommand(string cmd)
+        {
+            if (string.IsNullOrEmpty(cmd)) return;
+
+            string cmdLower = cmd.ToLower().Trim();
+
+            // Блокируем обратное срабатывание событий
+            suppressUiUpdate = true;
+            try
+            {
+                // TIM8 PWM
+                if (cmdLower == "tim8_pwm_on")
+                    chkCAT_TIM8_PWM.Checked = true;
+                else if (cmdLower == "tim8_pwm_off")
+                    chkCAT_TIM8_PWM.Checked = false;
+
+                // DC Correction
+                else if (cmdLower == "dc_on")
+                    chkCAT_DC_Corr.Checked = true;
+                else if (cmdLower == "dc_off")
+                    chkCAT_DC_Corr.Checked = false;
+
+                // AMP Correction (on/off)
+                else if (cmdLower == "amp_on")
+                    chkCAT_AMP_Corr.Checked = true;
+                else if (cmdLower == "amp_off")
+                    chkCAT_AMP_Corr.Checked = false;
+
+                // AMP Correction (set value)
+                else if (cmdLower.StartsWith("amp_set "))
+                {
+                    string valStr = cmdLower.Substring(8).Trim();
+                    if (float.TryParse(valStr, out float val) && val >= 0.5f && val <= 1.5f)
+                    {
+                        // Обновляем NumericUpDown коэффициента амплитудной коррекции
+                        if (nudCAT_AMP_Corr_Current != null)
+                            nudCAT_AMP_Corr_Current.Value = (decimal)val;
+
+                        LogCatMessage($"[UI] AMP ratio set: {val:F3}");
+                    }
+                }
+
+                // PHASE Correction (on/off)
+                else if (cmdLower == "phase_on")
+                    chkCAT_PHASE_Corr.Checked = true;
+                else if (cmdLower == "phase_off")
+                    chkCAT_PHASE_Corr.Checked = false;
+
+                // PHASE Correction (set value)
+                else if (cmdLower.StartsWith("phase_set "))
+                {
+                    string valStr = cmdLower.Substring(10).Trim();
+                    if (float.TryParse(valStr, out float val) && val >= -10.0f && val <= 10.0f)
+                    {
+                        // Обновляем NumericUpDown угла фазовой коррекции
+                        if (nudCAT_PH_Corr_Current != null)
+                            nudCAT_PH_Corr_Current.Value = (decimal)val;
+
+                        LogCatMessage($"[UI] Phase offset set: {val:F4} deg");
+                    }
+                }
+
+                // AGC
+                else if (cmdLower == "agc_on")
+                    chkCAT_AGC.Checked = true;
+                else if (cmdLower == "agc_off")
+                    chkCAT_AGC.Checked = false;
+
+                // Mode
+                else if (cmdLower.StartsWith("mode_set "))
+                {
+                    string mode = cmdLower.Substring(9).Trim().ToUpper();
+                    if (cmbCAT_Mode != null && (mode == "LSB" || mode == "USB" || mode == "CW"))
+                        cmbCAT_Mode.SelectedItem = mode;
+                }
+
+                // LO Frequency
+                else if (cmdLower.StartsWith("lo_freq_set "))
+                {
+                    string freqStr = cmdLower.Substring(12).Trim();
+                    if (uint.TryParse(freqStr, out uint freq) && freq >= LO_FREQ_MIN && freq <= LO_FREQ_MAX)
+                    {
+                        loFrequencyHz = freq;
+                        lblCAT_LO_Freq.Text = FormatFrequencyCAT(loFrequencyHz);
+                    }
+                }
+
+                // Swap IQ to UAC
+                if (cmdLower == "swap_iq_uac_on")
+                    chkCAT_Swap_IQ_Uac.Checked = true;
+                else if (cmdLower == "swap_iq_uac_off")
+                    chkCAT_Swap_IQ_Uac.Checked = false;
+
+                // Swap Rotate Encoder
+                if (cmdLower == "swap_rt_enc_on")
+                    chkCAT_SwapENC.Checked = true;
+                else if (cmdLower == "swap_rt_enc_off")
+                    chkCAT_SwapENC.Checked = false;
+
+                // XTall Frequency
+                else if (cmdLower.StartsWith("xt_freq_set "))
+                {
+                    string freqStr = cmdLower.Substring(12).Trim();
+                    if (uint.TryParse(freqStr, out uint freq) && freq >= LO_FREQ_MIN && freq <= LO_FREQ_MAX)
+                    {
+                        LogCatMessage($"[UI] XTall frequency set: {freq} Hz");
+                    }
+                }
+
+                // SI5351 Driver Current
+                else if (cmdLower.StartsWith("si_driver_set "))
+                {
+                    string valStr = cmdLower.Substring(14).Trim();
+
+                    // Поддержка ввода в hex (0x4C) или dec (76)
+                    uint value;
+                    if (valStr.StartsWith("0x"))
+                        uint.TryParse(valStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out value);
+                    else
+                        uint.TryParse(valStr, out value);
+
+                    // Допустимые значения: 0x4C=2mA, 0x4D=4mA, 0x4E=6mA, 0x4F=8mA
+                    if (value == 0x4C || value == 0x4D || value == 0x4E || value == 0x4F)
+                    {
+                        string currentStr = value switch
+                        {
+                            0x4C => "2mA",
+                            0x4D => "4mA",
+                            0x4E => "6mA",
+                            0x4F => "8mA",
+                            _ => "unknown"
+                        };
+
+                        // Обновляем ComboBox тока драйвера SI5351
+                        if (cmbCAT_SI_Driver_Value != null)
+                            cmbCAT_SI_Driver_Value.SelectedItem = currentStr;
+
+                        LogCatMessage($"[UI] SI5351 driver set: {currentStr} (0x{value:X2})");
+                    }
+                }
+            }
+            finally
+            {
+                suppressUiUpdate = false;
+            }
+        }
+        #endregion
+
         #region Контролы управления
-        
+
         // Заполнение списка аудиоустройств записи
         private void LoadAudioCaptureDevices()
         {
@@ -2860,7 +3997,7 @@ namespace SDR_DEV_APP
 
         #region Вспомогательные методы
 
-        // Форматирования частоты
+        // Форматирование частоты
         private static string FormatFrequency(float freqHz)
         {
             if (Math.Abs(freqHz) >= 1000)

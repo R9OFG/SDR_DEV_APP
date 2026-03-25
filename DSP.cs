@@ -318,12 +318,20 @@ namespace SDR_DEV_APP
 
         // Фазовая коррекция: Q_corrected = Q - k·I
         // Применяется ПОСЛЕ амплитудной коррекции!
-        public static void ApplyPhaseCorrection(Span<float> iSamples, Span<float> qSamples, float phaseCoeff)
+        public static void ApplyPhaseCorrection(Span<float> iSamples, Span<float> qSamples, float phaseDeg)
         {
-            if (Math.Abs(phaseCoeff) < 0.001f) return;
+            // Пропускаем, если угол близок к нулю (экономия процессора)
+            if (Math.Abs(phaseDeg) < 0.001f) return;
+
+            // Конвертация: градусы → радианы → коэффициент коррекции
+            // k = tan(φ), где φ в радианах
+            float phaseRad = phaseDeg * (float)(Math.PI / 180.0);
+            float phaseCoeff = (float)Math.Tan(phaseRad);
+
+            // Применяем коррекцию: Q = Q - k·I
             for (int i = 0; i < qSamples.Length; i++)
             {
-                qSamples[i] -= phaseCoeff * iSamples[i]; // Q = Q - k·I
+                qSamples[i] -= phaseCoeff * iSamples[i];
             }
         }
 

@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyVersion>1.0.0.563</AssemblyVersion>
-    <FileVersion>1.0.0.563</FileVersion>
+    <AssemblyVersion>1.0.0.696</AssemblyVersion>
+    <FileVersion>1.0.0.696</FileVersion>
     <ApplicationIcon>sound-wave.ico</ApplicationIcon>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -19,6 +19,7 @@
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup>
