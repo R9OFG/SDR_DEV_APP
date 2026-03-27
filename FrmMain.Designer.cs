@@ -120,6 +120,7 @@
             panelControls = new Panel();
             LblCAT_LO_Freq_Label = new Label();
             chkLoopWavPlayback = new CheckBox();
+            chkCAT_TIM15_PWM = new CheckBox();
             tabControl1.SuspendLayout();
             tabPageScope.SuspendLayout();
             panelScopeControls.SuspendLayout();
@@ -344,6 +345,7 @@
             // 
             // panelCATControls
             // 
+            panelCATControls.Controls.Add(chkCAT_TIM15_PWM);
             panelCATControls.Controls.Add(chkCAT_SwapENC);
             panelCATControls.Controls.Add(chkCAT_Swap_IQ_Uac);
             panelCATControls.Controls.Add(LblCATPHCurrentNote);
@@ -396,60 +398,60 @@
             // LblCATPHCurrentNote
             // 
             LblCATPHCurrentNote.AutoSize = true;
-            LblCATPHCurrentNote.Location = new Point(630, 88);
+            LblCATPHCurrentNote.Location = new Point(713, 90);
             LblCATPHCurrentNote.Name = "LblCATPHCurrentNote";
             LblCATPHCurrentNote.Size = new Size(95, 15);
-            LblCATPHCurrentNote.TabIndex = 21;
+            LblCATPHCurrentNote.TabIndex = 22;
             LblCATPHCurrentNote.Text = "Current PH Corr:";
             // 
             // nudCAT_PH_Corr_Current
             // 
-            nudCAT_PH_Corr_Current.Location = new Point(731, 84);
+            nudCAT_PH_Corr_Current.Location = new Point(814, 86);
             nudCAT_PH_Corr_Current.Name = "nudCAT_PH_Corr_Current";
             nudCAT_PH_Corr_Current.Size = new Size(60, 23);
-            nudCAT_PH_Corr_Current.TabIndex = 22;
+            nudCAT_PH_Corr_Current.TabIndex = 23;
             // 
             // LblCATAMPCurrentNote
             // 
             LblCATAMPCurrentNote.AutoSize = true;
-            LblCATAMPCurrentNote.Location = new Point(438, 88);
+            LblCATAMPCurrentNote.Location = new Point(530, 90);
             LblCATAMPCurrentNote.Name = "LblCATAMPCurrentNote";
             LblCATAMPCurrentNote.Size = new Size(105, 15);
-            LblCATAMPCurrentNote.TabIndex = 19;
+            LblCATAMPCurrentNote.TabIndex = 20;
             LblCATAMPCurrentNote.Text = "Current AMP Corr:";
             // 
             // nudCAT_AMP_Corr_Current
             // 
-            nudCAT_AMP_Corr_Current.Location = new Point(548, 84);
+            nudCAT_AMP_Corr_Current.Location = new Point(640, 86);
             nudCAT_AMP_Corr_Current.Name = "nudCAT_AMP_Corr_Current";
             nudCAT_AMP_Corr_Current.Size = new Size(60, 23);
-            nudCAT_AMP_Corr_Current.TabIndex = 20;
+            nudCAT_AMP_Corr_Current.TabIndex = 21;
             // 
             // LblCATSiDriverNote
             // 
             LblCATSiDriverNote.AutoSize = true;
-            LblCATSiDriverNote.Location = new Point(226, 88);
+            LblCATSiDriverNote.Location = new Point(318, 90);
             LblCATSiDriverNote.Name = "LblCATSiDriverNote";
             LblCATSiDriverNote.Size = new Size(73, 15);
-            LblCATSiDriverNote.TabIndex = 17;
+            LblCATSiDriverNote.TabIndex = 18;
             LblCATSiDriverNote.Text = "SI5351 Drive:";
             // 
             // cmbCAT_SI_Driver_Value
             // 
             cmbCAT_SI_Driver_Value.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbCAT_SI_Driver_Value.FormattingEnabled = true;
-            cmbCAT_SI_Driver_Value.Location = new Point(303, 84);
+            cmbCAT_SI_Driver_Value.Location = new Point(395, 86);
             cmbCAT_SI_Driver_Value.Name = "cmbCAT_SI_Driver_Value";
             cmbCAT_SI_Driver_Value.Size = new Size(121, 23);
-            cmbCAT_SI_Driver_Value.TabIndex = 18;
+            cmbCAT_SI_Driver_Value.TabIndex = 19;
             // 
             // LblCATXTallFreqNote
             // 
             LblCATXTallFreqNote.AutoSize = true;
-            LblCATXTallFreqNote.Location = new Point(8, 87);
+            LblCATXTallFreqNote.Location = new Point(100, 89);
             LblCATXTallFreqNote.Name = "LblCATXTallFreqNote";
             LblCATXTallFreqNote.Size = new Size(60, 15);
-            LblCATXTallFreqNote.TabIndex = 15;
+            LblCATXTallFreqNote.TabIndex = 16;
             LblCATXTallFreqNote.Text = "XTall Freq:";
             // 
             // LblCAT_Xtall_Freq
@@ -459,10 +461,10 @@
             LblCAT_Xtall_Freq.BorderStyle = BorderStyle.Fixed3D;
             LblCAT_Xtall_Freq.Font = new Font("Consolas", 18F, FontStyle.Bold, GraphicsUnit.Point, 204);
             LblCAT_Xtall_Freq.ForeColor = Color.Lime;
-            LblCAT_Xtall_Freq.Location = new Point(70, 80);
+            LblCAT_Xtall_Freq.Location = new Point(162, 82);
             LblCAT_Xtall_Freq.Name = "LblCAT_Xtall_Freq";
             LblCAT_Xtall_Freq.Size = new Size(144, 30);
-            LblCAT_Xtall_Freq.TabIndex = 16;
+            LblCAT_Xtall_Freq.TabIndex = 17;
             LblCAT_Xtall_Freq.Text = "25.000.000";
             // 
             // LblCAT_Mode
@@ -1109,6 +1111,16 @@
             chkLoopWavPlayback.Text = "Loop";
             chkLoopWavPlayback.UseVisualStyleBackColor = true;
             // 
+            // chkCAT_TIM15_PWM
+            // 
+            chkCAT_TIM15_PWM.AutoSize = true;
+            chkCAT_TIM15_PWM.Location = new Point(8, 89);
+            chkCAT_TIM15_PWM.Name = "chkCAT_TIM15_PWM";
+            chkCAT_TIM15_PWM.Size = new Size(90, 19);
+            chkCAT_TIM15_PWM.TabIndex = 15;
+            chkCAT_TIM15_PWM.Text = "TIM15 PWM";
+            chkCAT_TIM15_PWM.UseVisualStyleBackColor = true;
+            // 
             // FrmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -1247,5 +1259,6 @@
         private NumericUpDown nudCAT_PH_Corr_Current;
         private CheckBox chkCAT_SwapENC;
         private CheckBox chkCAT_Swap_IQ_Uac;
+        private CheckBox chkCAT_TIM15_PWM;
     }
 }

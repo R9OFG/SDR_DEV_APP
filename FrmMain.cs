@@ -3,7 +3,7 @@
  *  
  *  SDR_DEV_APP
  *  Version: 1.0 beta
- *  Modified: 25-03-2026
+ *  Modified: 27-03-2026
  *  
  *  Autor: R9OFG.RU https://r9ofg.ru/
  *  
@@ -852,7 +852,16 @@ namespace SDR_DEV_APP
 
             isScopeTabActive = tabControl1.SelectedTab == tabPageScope;
             // Обработчик изменения активной вкладки — ОБЯЗАТЕЛЬНО в UI-потоке!
-            tabControl1.SelectedIndexChanged += (s, e) => { isScopeTabActive = tabControl1.SelectedTab == tabPageScope; };
+            tabControl1.SelectedIndexChanged += (s, e) => {
+                isScopeTabActive = tabControl1.SelectedTab == tabPageScope;
+
+                // Перерисовка лога CAT при переходе на вкладку
+                if (tabControl1.SelectedTab == tabPageCAT)
+                {
+                    txtCATTerminalLog.Invalidate();  // Помечаем область как требующую перерисовки
+                    txtCATTerminalLog.Update();      // Принудительно применяем перерисовку сразу
+                }
+            };
 
             // ============================================================
             // Спектры
@@ -2164,6 +2173,7 @@ namespace SDR_DEV_APP
                     tbCAT_Message.Enabled = isConn;
                     btnCAT_SendCommand.Enabled = isConn;
                     chkCAT_TIM8_PWM.Enabled = isConn;
+                    chkCAT_TIM15_PWM.Enabled = isConn;
                     chkCAT_DC_Corr.Enabled = isConn;
                     chkCAT_AMP_Corr.Enabled = isConn;
                     chkCAT_PHASE_Corr.Enabled = isConn;
@@ -2217,6 +2227,18 @@ namespace SDR_DEV_APP
                     var state = chkCAT_TIM8_PWM.Checked ? "ON" : "OFF";
                     LogCatMessage($"[CAT] TIM8_PWM → {state}");
                     catModule.CmdTim8Pwm(chkCAT_TIM8_PWM.Checked);
+                }
+            };
+
+            // Обработчик чекбокса TIM15 PWM
+            chkCAT_TIM15_PWM.CheckedChanged += (s, e) =>
+            {
+                if (suppressUiUpdate) return;
+                if (catModule?.IsConnected == true)
+                {
+                    var state = chkCAT_TIM15_PWM.Checked ? "ON" : "OFF";
+                    LogCatMessage($"[CAT] TIM15_PWM → {state}");
+                    catModule.CmdTim15Pwm(chkCAT_TIM15_PWM.Checked);
                 }
             };
 
@@ -2446,6 +2468,7 @@ namespace SDR_DEV_APP
             tbCAT_Message.Enabled = false;
             btnCAT_SendCommand!.Enabled = false;
             chkCAT_TIM8_PWM.Enabled = false;
+            chkCAT_TIM15_PWM.Enabled = false;
             chkCAT_DC_Corr.Enabled = false;
             chkCAT_AMP_Corr.Enabled = false;
             chkCAT_PHASE_Corr.Enabled = false;
@@ -2600,6 +2623,11 @@ namespace SDR_DEV_APP
                 statusContext = "tim8_pwm";
                 return;
             }
+            else if (msg.Trim().Equals("TIM15 PWM:", StringComparison.OrdinalIgnoreCase))
+            {
+                statusContext = "tim15_pwm";
+                return;
+            }
             else if (msg.Trim().Equals("Swap IQ UAC:", StringComparison.OrdinalIgnoreCase))
             {
                 statusContext = "swap_iq_uac";
@@ -2740,6 +2768,12 @@ namespace SDR_DEV_APP
                         case "tim8_pwm":
                             if (chkCAT_TIM8_PWM != null && chkCAT_TIM8_PWM.Checked != isOn)
                                 chkCAT_TIM8_PWM.Checked = isOn;
+                            statusContext = null; // Сброс сразу
+                            break;
+
+                        case "tim15_pwm":
+                            if (chkCAT_TIM15_PWM != null && chkCAT_TIM15_PWM.Checked != isOn)
+                                chkCAT_TIM15_PWM.Checked = isOn;
                             statusContext = null; // Сброс сразу
                             break;
 
@@ -3013,6 +3047,12 @@ namespace SDR_DEV_APP
                     chkCAT_TIM8_PWM.Checked = true;
                 else if (cmdLower == "tim8_pwm_off")
                     chkCAT_TIM8_PWM.Checked = false;
+
+                // TIM15 PWM
+                if (cmdLower == "tim15_pwm_on")
+                    chkCAT_TIM15_PWM.Checked = true;
+                else if (cmdLower == "tim15_pwm_off")
+                    chkCAT_TIM15_PWM.Checked = false;
 
                 // DC Correction
                 else if (cmdLower == "dc_on")

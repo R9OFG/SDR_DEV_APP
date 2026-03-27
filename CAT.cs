@@ -3,7 +3,7 @@
  *  
  *  SDR_DEV_APP
  *  Version: 1.0 beta
- *  Modified: 25-03-2026
+ *  Modified: 27-03-2026
  *  
  *  Autor: R9OFG.RU https://r9ofg.ru/    
  *  
@@ -160,6 +160,7 @@ namespace SDR_DEV_APP
 
         #region Команды STM32 (Обертки)
         public void CmdTim8Pwm(bool on) => SendCommand(on ? "tim8_pwm_on" : "tim8_pwm_off");
+        public void CmdTim15Pwm(bool on) => SendCommand(on ? "tim15_pwm_on" : "tim15_pwm_off");
         public void CmdSwapIQUAC(bool on) => SendCommand(on ? "swap_iq_uac_on" : "swap_iq_uac_off");
         public void CmdSwapRotateENC(bool on) => SendCommand(on ? "swap_rt_enc_on" : "swap_rt_enc_off");
         public void CmdDcCorrection(bool on) => SendCommand(on ? "dc_on" : "dc_off");
@@ -178,6 +179,7 @@ namespace SDR_DEV_APP
         public void RequestInitialStates()
         {
             SendCommand("tim8_pwm_status");
+            SendCommand("tim15_pwm_status");
             SendCommand("swap_iq_uac_status");
             SendCommand("swap_rt_enc_status");
             SendCommand("dc_status");
