@@ -3079,7 +3079,7 @@ namespace SDR_DEV_APP
                 // AMP Correction (set value)
                 else if (cmdLower.StartsWith("amp_set "))
                 {
-                    string valStr = cmdLower.Substring(8).Trim();
+                    string valStr = cmdLower[8..].Trim();
                     if (float.TryParse(valStr, out float val) && val >= 0.5f && val <= 1.5f)
                     {
                         // Обновляем NumericUpDown коэффициента амплитудной коррекции
@@ -3099,7 +3099,7 @@ namespace SDR_DEV_APP
                 // PHASE Correction (set value)
                 else if (cmdLower.StartsWith("phase_set "))
                 {
-                    string valStr = cmdLower.Substring(10).Trim();
+                    string valStr = cmdLower[10..].Trim();
                     if (float.TryParse(valStr, out float val) && val >= -10.0f && val <= 10.0f)
                     {
                         // Обновляем NumericUpDown угла фазовой коррекции
@@ -3119,7 +3119,7 @@ namespace SDR_DEV_APP
                 // Mode
                 else if (cmdLower.StartsWith("mode_set "))
                 {
-                    string mode = cmdLower.Substring(9).Trim().ToUpper();
+                    string mode = cmdLower[9..].Trim().ToUpper();
                     if (cmbCAT_Mode != null && (mode == "LSB" || mode == "USB" || mode == "CW"))
                         cmbCAT_Mode.SelectedItem = mode;
                 }
@@ -3127,7 +3127,7 @@ namespace SDR_DEV_APP
                 // LO Frequency
                 else if (cmdLower.StartsWith("lo_freq_set "))
                 {
-                    string freqStr = cmdLower.Substring(12).Trim();
+                    string freqStr = cmdLower[12..].Trim();
                     if (uint.TryParse(freqStr, out uint freq) && freq >= LO_FREQ_MIN && freq <= LO_FREQ_MAX)
                     {
                         loFrequencyHz = freq;
@@ -3150,7 +3150,7 @@ namespace SDR_DEV_APP
                 // XTall Frequency
                 else if (cmdLower.StartsWith("xt_freq_set "))
                 {
-                    string freqStr = cmdLower.Substring(12).Trim();
+                    string freqStr = cmdLower[12..].Trim();
                     if (uint.TryParse(freqStr, out uint freq) && freq >= LO_FREQ_MIN && freq <= LO_FREQ_MAX)
                     {
                         LogCatMessage($"[UI] XTall frequency set: {freq} Hz");
@@ -3160,14 +3160,14 @@ namespace SDR_DEV_APP
                 // SI5351 Driver Current
                 else if (cmdLower.StartsWith("si_driver_set "))
                 {
-                    string valStr = cmdLower.Substring(14).Trim();
+                    string valStr = cmdLower[14..].Trim();
 
                     // Поддержка ввода в hex (0x4C) или dec (76)
                     uint value;
                     if (valStr.StartsWith("0x"))
-                        uint.TryParse(valStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out value);
+                        uint.TryParse(valStr.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out value);
                     else
-                        uint.TryParse(valStr, out value);
+                        _ = uint.TryParse(valStr, out value);
 
                     // Допустимые значения: 0x4C=2mA, 0x4D=4mA, 0x4E=6mA, 0x4F=8mA
                     if (value == 0x4C || value == 0x4D || value == 0x4E || value == 0x4F)
@@ -3711,19 +3711,51 @@ namespace SDR_DEV_APP
         // Обработчик завершения воспроизведения
         private void OnWavPlaybackCompleted()
         {
-            // При зацикливании это событие НЕ вызывается — задача продолжает работать
-            // Поэтому здесь только обычная остановка
+            // Отписка от событий источника (как в BtnStopCapture_Click)
+            if (currentSource != null)
+            {
+                currentSource.SamplesAvailable -= OnSamplesReceived;
+                if (currentSource is WavSignalSource wavSource)
+                {
+                    wavSource.PositionChanged -= OnWavPositionChanged;
+                    wavSource.PlaybackCompleted -= OnWavPlaybackCompleted;
+                }
+            }
 
+            // Сохраняем ссылку и обнуляем currentSource
+            var sourceToStop = currentSource;
+            currentSource = null;
+
+            // Сброс состояния обработки
+            ResetSignalProcessingState();
+
+            // Остановка источника (без await, так как он уже завершён)
+            sourceToStop?.Stop();
+
+            // Остановка и очистка аудиовыхода
             audioOutput?.Stop();
             audioOutput?.Dispose();
             audioOutput = null;
 
+            // Обновление UI через Invoke (как в BtnStopCapture_Click)
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => UpdateUiAfterWavStop()));
+            }
+            else
+            {
+                UpdateUiAfterWavStop();
+            }
+        }
+
+        // Метод обновления UI для повторного использования
+        private void UpdateUiAfterWavStop()
+        {
             chkMuteAudioOut.Enabled = false;
             progressBarWavPosition.Visible = false;
             progressBarWavPosition.Value = 0;
             LblWAVFilePositionTime.Text = "";
 
-            // Восстанавливаем управление аудиоустройством
             UpdateStartButtonState();
             cbInputAudioDeviceList.Enabled = true;
             btnOpenAudioManager.Enabled = true;
@@ -3734,7 +3766,6 @@ namespace SDR_DEV_APP
             toolStripStatusLabelSignalSource!.Text = "Signal Source:";
             toolStripStatusLabelSampleRate!.Text = "Sample Rate:";
             toolStripStatusLabelBufferSize!.Text = "I/Q:";
-
             groupBox1.Enabled = false;
             groupBox2.Enabled = false;
         }
