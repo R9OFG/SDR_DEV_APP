@@ -159,6 +159,7 @@ namespace SDR_DEV_APP
         private bool _isSpectrumTickBusy = false;
         private DateTime _lastStatsUpdate = DateTime.MinValue;
         private DateTime _lastWaterfallFrame = DateTime.MinValue;
+        private DateTime _lastDataReceivedTime = DateTime.MinValue;
         // Метки статистики: 5 раз/сек
         private const int StatsUpdateIntervalMs = 200;
         // Водопад: макс 25 кадров/сек
@@ -978,6 +979,9 @@ namespace SDR_DEV_APP
         private void OnSamplesReceived(float[] iSamples, float[] qSamples)
         {
             if (iSamples.Length == 0) return;
+
+            // Обновляем время прихода данных
+            _lastDataReceivedTime = DateTime.Now;
 
             #region 1. Применяем цифровой ФНЧ к СЫРЫМ сэмплам
             if (isDigitalLpfEnabled && lpfCoeffs != null && lpfCoeffs.Length > 0)
@@ -1852,6 +1856,12 @@ namespace SDR_DEV_APP
                     shouldUpdateWaterfall = wavSource.IsRunning && !wavSource.IsPaused;
                 else
                     shouldUpdateWaterfall = currentSource!.IsRunning;
+
+                // Если данные не поступали дольше 100 мс, считаем что поток остановлен
+                if (shouldUpdateWaterfall && (DateTime.Now - _lastDataReceivedTime).TotalMilliseconds > 100)
+                {
+                    shouldUpdateWaterfall = false;
+                }
 
                 if (shouldUpdateWaterfall &&
                     (DateTime.Now - _lastWaterfallFrame).TotalMilliseconds >= MinWaterfallFrameIntervalMs)

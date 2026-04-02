@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyVersion>1.0.0.700</AssemblyVersion>
-    <FileVersion>1.0.0.700</FileVersion>
+    <AssemblyVersion>1.0.0.704</AssemblyVersion>
+    <FileVersion>1.0.0.704</FileVersion>
     <ApplicationIcon>sound-wave.ico</ApplicationIcon>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
